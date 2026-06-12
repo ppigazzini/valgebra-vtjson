@@ -36,6 +36,16 @@ mapping and the ledger of intentional behavioral differences.
 > The compatibility layer is a migration path, not a destination. New code
 > should use valgebra's native API directly.
 
+## Performance
+
+Translating a vtjson schema onto valgebra's Rust core makes the same schema
+validate much faster than under pure-Python vtjson, with the same accept/reject
+decision. On a synthetic benchmark (compile-once on both sides, release build of
+valgebra), valgebra is ~7x faster on a 50-field record and ~17x–42x faster on
+mappings, nested records, and large arrays. Numbers, method, and limits are in
+[docs/performance.md](docs/performance.md); reproduce with
+`uv run --group bench pytest benches/`.
+
 ## Development
 
 This repo resolves `valgebra` from a sibling checkout (`../valgebra`). With both

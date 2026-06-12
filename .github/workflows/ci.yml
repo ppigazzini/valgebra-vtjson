@@ -52,3 +52,11 @@ jobs:
       - name: Differential parity against pinned vtjson
         working-directory: valgebra-vtjson
         run: uv run pytest -v
+      # Smoke-run the vtjson-versus-valgebra benchmark with timing disabled so
+      # the comparison suite keeps working; its numbers live in the performance
+      # page. The files are named bench_*, so override the collection pattern.
+      - name: Smoke-run the benchmarks
+        working-directory: valgebra-vtjson
+        run: >
+          uv run --group bench pytest benches/
+          -o python_files="bench_*.py" --benchmark-disable -q

@@ -53,6 +53,11 @@ dev = [
     "dnspython>=2",
     "python-magic>=0.4",
 ]
+# Benchmark-only tooling: the wall-clock harness. vtjson is already a dev
+# dependency (the parity oracle), so the comparison needs nothing more.
+bench = [
+    "pytest-benchmark>=5",
+]
 
 [tool.pytest.ini_options]
 minversion = "8.0"
@@ -92,9 +97,16 @@ ignore = [
     "TRY003",
     "ERA001",
 ]
+# Benchmarks assert results, use magic sizes, and are not a package.
+"benches/**" = ["S101", "PLR2004", "INP001"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["vtjson_compat"]
 
 [tool.ty.environment]
 python-version = "3.14"
+
+[tool.ty.src]
+# Benchmarks are a measurement harness, not the typed surface; they import the
+# optional bench dependency group, absent in the type-check lane.
+exclude = ["benches"]
