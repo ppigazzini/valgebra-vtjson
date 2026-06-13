@@ -32,39 +32,88 @@ import vtjson_compat as vg
 RECORD_WIDTH = 50
 MAPPING_SIZE = 50
 ARRAY_LEN = 10_000
+NEST_DEPTH = 12
 
 LIBRARIES = ["vtjson", "valgebra"]
 
+# Each shape returns ``(vt_schema, vg_schema, data)``. The implicit forms (dict,
+# list, scalar) read identically in both libraries, so they share one object;
+# the combinator forms (union, intersect, regex) are spelled with each library's
+# own constructs, since those are different callables. ``data`` is a passing
+# value: the membership fast path both libraries optimize.
 
-def shape_record() -> tuple[object, object]:
+
+def shape_scalar() -> tuple[object, object, object]:
+    return int, int, 42
+
+
+def shape_record() -> tuple[object, object, object]:
     schema = {f"f{i}": int for i in range(RECORD_WIDTH)}
     data = {f"f{i}": i for i in range(RECORD_WIDTH)}
-    return schema, data
+    return schema, schema, data
 
 
-def shape_mapping() -> tuple[object, object]:
+def shape_mapping() -> tuple[object, object, object]:
     schema = {str: int}
     data = {f"k{i}": i for i in range(MAPPING_SIZE)}
-    return schema, data
+    return schema, schema, data
 
 
-def shape_array() -> tuple[object, object]:
+def shape_array() -> tuple[object, object, object]:
     schema = [int, ...]
     data = list(range(ARRAY_LEN))
-    return schema, data
+    return schema, schema, data
 
 
-def shape_nested() -> tuple[object, object]:
+def shape_nested() -> tuple[object, object, object]:
     schema = {"user": {"name": str, "age?": int}, "tags": [str, ...]}
     data = {"user": {"name": "Ada", "age": 36}, "tags": ["a", "b", "c"]}
-    return schema, data
+    return schema, schema, data
+
+
+def shape_deep() -> tuple[object, object, object]:
+    schema: object = int
+    data: object = 0
+    for _ in range(NEST_DEPTH):
+        schema = {"next": schema}
+        data = {"next": data}
+    return schema, schema, data
+
+
+def shape_union() -> tuple[object, object, object]:
+    # A discriminated string set plus a numeric arm; the value hits the last arm.
+    return (
+        vt.union("pending", "active", "finished", int),
+        vg.union("pending", "active", "finished", int),
+        42,
+    )
+
+
+def shape_refinement() -> tuple[object, object, object]:
+    # A bounded integer: the intersect-of-comparisons refinement family.
+    return (
+        vt.intersect(int, vt.ge(0), vt.lt(1000)),
+        vg.intersect(int, vg.ge(0), vg.lt(1000)),
+        500,
+    )
+
+
+def shape_format() -> tuple[object, object, object]:
+    # A regular-expression string format, the same engine on both sides.
+    pattern = r"[0-9a-f]{24}"
+    return vt.regex(pattern), vg.regex(pattern), "0123456789abcdef01234567"
 
 
 SHAPES = {
+    "scalar": shape_scalar,
     "record": shape_record,
     "mapping": shape_mapping,
     "array": shape_array,
     "nested": shape_nested,
+    "deep": shape_deep,
+    "union": shape_union,
+    "refinement": shape_refinement,
+    "format": shape_format,
 }
 
 
@@ -89,8 +138,8 @@ def valgebra_check(schema: object, data: object) -> object:
 @pytest.mark.parametrize("shape", list(SHAPES))
 def test_compare(benchmark: object, shape: str, lib: str) -> None:
     benchmark.group = shape  # type: ignore[attr-defined]
-    schema, data = SHAPES[shape]()
+    vt_schema, vg_schema, data = SHAPES[shape]()
     if lib == "vtjson":
-        benchmark(vtjson_check(schema, data))
+        benchmark(vtjson_check(vt_schema, data))
     else:
-        benchmark(valgebra_check(schema, data), data)
+        benchmark(valgebra_check(vg_schema, data), data)
