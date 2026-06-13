@@ -7,10 +7,10 @@ schema-construct namespace (the same constructs, from vtjson on one side and the
 compatibility layer on the other), and checks that the two agree on a document
 corpus.
 
-The test skips when offline. Schemas that use features the compatibility layer
-does not support (schema-valued dict keys) raise ``NotImplementedError`` and are
-recorded as unsupported rather than failing — those gaps are in the migration
-ledger (docs/migrating-from-vtjson.md).
+The test skips when offline. Every string-keyed schema and five of the six
+schema-keyed tables reach identical decisions; the sixth (worker_runs) keys a
+value by a mixed record-plus-catch-all that valgebra cannot express and is
+asserted to be the one ledgered gap (docs/migrating-from-vtjson.md).
 """
 
 from __future__ import annotations
@@ -50,6 +50,37 @@ _STRING_KEYED = [
     "contributors_schema", "action_schema", "results_schema", "api_access_schema",
     "api_schema", "runs_schema",
 ]  # fmt: skip
+
+# Schemas that key a dict (or set) by a *schema*, not by string literals. Five of
+# the six now translate (a single key-schema → value-schema clause, or a
+# single-element set). worker_runs keys a dict whose *value* mixes a named key
+# with a key-schema catch-all — a heterogeneous mapping valgebra cannot express;
+# it is the one ledgered gap, asserted unsupported below.
+_MAPPING_KEYED = [
+    "cache_schema", "wtt_map_schema", "connections_counter_schema",
+    "books_schema", "unfinished_runs_schema",
+]  # fmt: skip
+_HETEROGENEOUS = "worker_runs_schema"
+
+# A 24-hex string is a valid ObjectId, so a valid run_id / book / worker key.
+_OID = "0123456789abcdef01234567"
+
+# Per-schema documents, chosen so vtjson and the compat layer must agree. Each
+# corpus exercises an accepted shape (often the empty mapping/set) and rejected
+# shapes that fail on the key schema, the value schema, or the value structure.
+_MAPPING_CORPUS: dict[str, list[object]] = {
+    "connections_counter_schema": [
+        {}, {"1.2.3.4": 5}, {"1.2.3.4": 0}, {"1.2.3.4": -1},
+        {"not-an-ip": 5}, {"1.2.3.4": "x"},
+    ],
+    "wtt_map_schema": [
+        {}, {"host-4cores-abcd": (_OID, 3)}, {"bad-name": (_OID, 3)},
+        {"host-4cores-abcd": "not-a-tuple"},
+    ],
+    "unfinished_runs_schema": [set(), {_OID}, {"bad"}, {123}],
+    "cache_schema": [{}, {"x": {}}, {_OID: "not-a-dict"}],
+    "books_schema": [{}, {123: {}}, {"book.epd": "not-a-dict"}],
+}  # fmt: skip
 
 _SUPPORTED_ARCHES = [
     "apple-silicon", "armv7", "armv7-neon", "armv8", "armv8-dotprod", "e2k",
@@ -123,7 +154,8 @@ def _build(lib: object, source: str) -> dict:
         ),
     )
     exec(compile(source, "<fishtest_schemas>", "exec"), namespace)  # noqa: S102
-    return {name: namespace[name] for name in _STRING_KEYED if name in namespace}
+    wanted = [*_STRING_KEYED, *_MAPPING_KEYED, _HETEROGENEOUS]
+    return {name: namespace[name] for name in wanted if name in namespace}
 
 
 def _accepts(validate, schema: object, obj: object) -> bool:
@@ -200,3 +232,47 @@ def test_fishtest_upstream_parity() -> None:
     assert "kvstore_schema" not in unsupported
     assert "user_schema" not in unsupported
     assert "worker_schema" not in unsupported
+
+
+def test_fishtest_upstream_mapping_keyed_parity() -> None:
+    """The five schema-keyed tables translate and agree with vtjson."""
+    source = _fetch_source()
+    if source is None:
+        pytest.skip("the fishtest schema source is not reachable (offline)")
+    try:
+        vt_schemas = _build(vt, source)
+        vg_schemas = _build(vg, source)
+    except ImportError as exc:  # an optional format extra is not installed
+        pytest.skip(f"optional dependency missing: {exc}")
+
+    checked = 0
+    accepted = 0
+    for name in _MAPPING_KEYED:
+        if name not in vt_schemas or name not in vg_schemas:
+            continue
+        vt_schema, vg_schema = vt_schemas[name], vg_schemas[name]
+        for document in _MAPPING_CORPUS[name]:
+            # These must translate, not raise: that is the point of this test.
+            vg_ok = _accepts(vg.validate, vg_schema, document)
+            vt_ok = _accepts(vt.validate, vt_schema, document)
+            assert vt_ok == vg_ok, f"{name}: {document!r} vtjson={vt_ok} compat={vg_ok}"
+            checked += 1
+            accepted += int(vt_ok)
+
+    assert checked > 0, "no mapping-keyed schema/document pairs were checked"
+    assert accepted > 0, "no accept path was exercised; the corpus is too weak"
+
+
+def test_fishtest_worker_runs_is_the_one_ledgered_gap() -> None:
+    """worker_runs keys a value by a mixed record+catch-all: unsupported, ledgered."""
+    source = _fetch_source()
+    if source is None:
+        pytest.skip("the fishtest schema source is not reachable (offline)")
+    try:
+        vg_schemas = _build(vg, source)
+    except ImportError as exc:
+        pytest.skip(f"optional dependency missing: {exc}")
+    if _HETEROGENEOUS not in vg_schemas:
+        pytest.skip(f"{_HETEROGENEOUS} absent from the fetched schemas")
+    with pytest.raises(NotImplementedError):
+        vg.validate(vg_schemas[_HETEROGENEOUS], {})
