@@ -44,6 +44,7 @@ valgebra = { path = "../valgebra", editable = true }
 [dependency-groups]
 dev = [
     "annotated-types>=0.7",
+    "hypothesis>=6",
     "pytest>=8",
     "ruff>=0.15.16",
     "ty>=0.0.48",
