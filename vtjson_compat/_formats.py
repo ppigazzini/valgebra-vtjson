@@ -16,7 +16,7 @@ from urllib.parse import urlparse
 
 from valgebra._valgebra import CompiledValidator
 
-from ._translate import _predicate, _require
+from ._translate import _nullary, _predicate, _require
 
 
 def regex(
@@ -32,6 +32,7 @@ def regex(
     return _predicate(lambda obj: isinstance(obj, str) and match(obj) is not None)
 
 
+@_nullary
 def regex_pattern() -> CompiledValidator:
     """Match strings that are themselves valid regular expressions."""
 
@@ -62,6 +63,7 @@ def glob(pattern: str, name: str | None = None) -> CompiledValidator:
     return _predicate(check)
 
 
+@_nullary
 def url() -> CompiledValidator:
     """Match strings parseable as a URL with a scheme and a network location."""
 
@@ -74,6 +76,7 @@ def url() -> CompiledValidator:
     return _predicate(check)
 
 
+@_nullary
 def ip_address(version: int | None = None) -> CompiledValidator:
     """Match IP addresses of the given version (4, 6, or any)."""
     if version == 4:  # noqa: PLR2004
@@ -98,6 +101,7 @@ def ip_address(version: int | None = None) -> CompiledValidator:
     return _predicate(check)
 
 
+@_nullary
 def date_time(format: str | None = None) -> CompiledValidator:  # noqa: A002
     """Match an ISO 8601 date-time, or a ``strptime`` ``format`` if given."""
 
@@ -116,6 +120,7 @@ def date_time(format: str | None = None) -> CompiledValidator:  # noqa: A002
     return _predicate(check)
 
 
+@_nullary
 def date() -> CompiledValidator:
     """Match an ISO 8601 date."""
 
@@ -131,6 +136,7 @@ def date() -> CompiledValidator:
     return _predicate(check)
 
 
+@_nullary
 def time() -> CompiledValidator:
     """Match an ISO 8601 time."""
 
@@ -146,6 +152,7 @@ def time() -> CompiledValidator:
     return _predicate(check)
 
 
+@_nullary
 def email(**kw: object) -> CompiledValidator:
     """Match valid email addresses (via ``email_validator``, like vtjson)."""
     email_validator = _require("email_validator")
@@ -163,6 +170,7 @@ def email(**kw: object) -> CompiledValidator:
     return _predicate(check)
 
 
+@_nullary
 def domain_name(
     ascii_only: bool = True,  # noqa: FBT001, FBT002
     resolve: bool = False,  # noqa: FBT001, FBT002

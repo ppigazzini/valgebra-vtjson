@@ -27,7 +27,8 @@ The compatibility surface mirrors vtjson's names: `validate`, the combinators
 `filter`), the string formats (`regex`, `regex_pattern`, `glob`, `url`,
 `ip_address`, `date_time`, `date`, `time`), the network formats (`email`,
 `domain_name`), the wrappers (`lax`, `strict`, `quote`, `set_name`, `set_label`,
-`make_type`, `safe_cast`), and `anything`/`nothing`/`optional_key`/`float_`.
+`make_type`, `safe_cast`), and `anything`/`nothing`/`optional_key`/`float_`/
+`number`.
 
 ## Optional extras
 
@@ -60,8 +61,9 @@ where valgebra deliberately decides differently because vtjson is wrong.
 | `magic` | always available (libmagic installed) | needs the `vtjson-magic` extra | Install the extra, or replace with a predicate. |
 | `email`, `domain_name` | always available | need the `vtjson-formats` extra | Install the extra. |
 | Raising predicate | swallowed into a generic failure | surfaced as a distinct `predicate_error` | A crashing predicate is now visible; fix the predicate. |
-| List `[A, B, ...]` | prefix plus repeated tail | not supported (raises `NotImplementedError`) | Use `[T, ...]` (homogeneous) or a fixed `[A, B]`. |
-| Schema-valued dict keys | supported | string keys only (raises `NotImplementedError`) | Use a `{KeyType: ValueType}` mapping or string keys. |
+| List `[A, B, ...]` | prefix plus repeated tail | not supported (raises `NotImplementedError`) | Use `[T, ...]` (homogeneous) or a fixed `[A, B]`. valgebra has no prefix-plus-variadic-tail sequence node yet. |
+| Heterogeneous mapping | several key-schema → value-schema clauses, or named keys mixed with a key-schema catch-all (e.g. `{str: int, int: str}` or `{"name": str, str: int}`) | a single `{KeyType: ValueType}` mapping is supported (any key schema, including a regex); multiple clauses raise `NotImplementedError` | Split into one mapping per key schema, or use a record. valgebra's mapping is one key schema + one value schema. |
+| `Apply` / `skip_first` | reorder how `Annotated` arguments apply | not supported (the layer applies `Annotated` metadata in declaration order) | Reorder the `Annotated` arguments instead; valgebra has no apply-order modifier. |
 
 ## Conformance against fishtest
 
@@ -70,11 +72,15 @@ The compatibility layer is checked against the real
 fetched at a pinned commit and run through both vtjson and the compatibility
 layer. Every string-keyed schema — including the full run document
 (`runs_schema`), `api_schema`, `action_schema`, and `results_schema` — reaches
-the same accept/reject decision. The schemas that key a dict by a *schema*
-(`books_schema`, `cache_schema`, and the other mapping-keyed tables) use the
-schema-valued-key form, which is the one unsupported construct above. fishtest's
-own `magic`, `ObjectId`, and `set_label`/`subs` usages map to the optional
-extras, an `isinstance` check, and `lazy` respectively.
+the same accept/reject decision. Five of the six schema-keyed tables
+(`cache_schema`, `wtt_map_schema`, `connections_counter_schema`, `books_schema`,
+and the `unfinished_runs_schema` set) also reach identical decisions: each keys
+by a single key schema, which the layer now translates. The sixth,
+`worker_runs_schema`, keys a value by a *mixed* record-plus-catch-all
+(`{run_id: True, "last_run": run_id}`) — the heterogeneous mapping in the ledger
+above — and is the one remaining gap. fishtest's own `magic`, `ObjectId`, and
+`set_label`/`subs` usages map to the optional extras, an `isinstance` check, and
+`lazy` respectively.
 
 ## A worked example
 

@@ -8,3 +8,6 @@ dist/
 build/
 *.egg-info/
 uv.lock
+
+# Maintainer planning notes — not part of the shipped package
+__DEV/

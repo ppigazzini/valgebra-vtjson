@@ -7,6 +7,8 @@ meaning is expressed with the algebra so the accept/reject decision matches.
 """
 
 import importlib
+from collections.abc import Callable
+from types import GenericAlias
 from typing import Annotated
 
 from valgebra._valgebra import CompiledValidator
@@ -45,6 +47,21 @@ def _refine(marker: _Marker) -> CompiledValidator:
 def _predicate(check: object) -> CompiledValidator:
     """Build a validator that admits a value iff ``check(value)`` is truthy."""
     return _validator(Annotated[object, check])
+
+
+def _nullary(
+    func: Callable[..., CompiledValidator],
+) -> Callable[..., CompiledValidator]:
+    """Tag a construct factory vtjson also accepts bare, without a call.
+
+    vtjson auto-instantiates a bare construct *class* used as a schema (e.g.
+    ``{ip_address: int}`` keys by IP without writing ``ip_address()``). The
+    compatibility constructs are factory functions, so a bare one would otherwise
+    fall into the predicate branch and be called *on the value*; this tag tells
+    ``_translate`` to instantiate it instead, matching vtjson.
+    """
+    func.__dict__["_vtjson_nullary"] = True
+    return func
 
 
 def _require(module: str) -> object:
@@ -87,6 +104,9 @@ def _translate(schema: object) -> CompiledValidator:  # noqa: PLR0911
     if isinstance(schema, set):
         return _translate_set(schema)
     if callable(schema):
+        if getattr(schema, "_vtjson_nullary", False):
+            # A bare nullary construct, like vtjson's auto-instantiated bare class.
+            return _translate(schema())  # ty: ignore[call-top-callable]
         # A bare callable is a predicate over any value (the vtjson convention).
         return _validator(Annotated[object, schema])
     # Anything else is an exact-value constant matched by equality.
@@ -142,18 +162,26 @@ def _translate_set(schema: set) -> CompiledValidator:
 def _translate_dict(schema: dict) -> CompiledValidator:
     if not schema:
         return _validator({})
-    # A single type-keyed entry is a mapping: {KeyType: ValueType}.
+    # All-string keys: a record, optionality via the "key?" convention.
+    if all(isinstance(key, str) for key in schema):
+        record = {key: _translate(value) for key, value in schema.items()}
+        return _validator(record)
+    # A single key-pattern entry is a mapping: every key matches the key schema
+    # and its value the value schema. valgebra's dict[K, V] accepts an arbitrary
+    # key schema, so a type key and a schema key (e.g. a regex) are handled the
+    # same way.
     if len(schema) == 1:
         (key,) = schema
-        if isinstance(key, type):
-            return _validator({key: _translate(schema[key])})
-    # Otherwise a record: string keys, optionality via the "key?" convention.
-    record: dict[str, object] = {}
-    for key, value in schema.items():
-        if not isinstance(key, str):
-            msg = (
-                "record keys must be strings; schema-valued keys are not supported yet"
-            )
-            raise NotImplementedError(msg)
-        record[key] = _translate(value)
-    return _validator(record)
+        # GenericAlias builds dict[K, V] at runtime; the element schemas are
+        # validators, not static type expressions.
+        mapping = GenericAlias(_DICT, (_translate(key), _translate(schema[key])))
+        return _validator(mapping)
+    # Several key-pattern clauses, or named keys mixed with a key-pattern
+    # catch-all, need a heterogeneous mapping (different value schemas for
+    # different key patterns) that valgebra cannot express; see the ledger.
+    msg = (
+        "a dict with several key-pattern clauses, or named keys mixed with a "
+        "key-pattern catch-all, is not supported: valgebra has no heterogeneous "
+        "mapping"
+    )
+    raise NotImplementedError(msg)

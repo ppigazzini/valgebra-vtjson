@@ -103,6 +103,11 @@ from ._translate import _translate
 anything = _anything
 nothing = _nothing
 
+# vtjson's `number` is a deprecated alias for its `float` schema, which admits
+# both ints and floats. valgebra keeps `float_` for the floats-only set, so this
+# matches vtjson's lax meaning exactly.
+number = union(int, float)
+
 __all__ = [
     "ValidationError",
     "anything",
@@ -134,6 +139,7 @@ __all__ = [
     "magic",
     "make_type",
     "nothing",
+    "number",
     "one_of",
     "optional_key",
     "protocol",

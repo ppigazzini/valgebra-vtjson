@@ -35,7 +35,7 @@ from valgebra._valgebra import (
     validator as _validator,
 )
 
-from ._translate import _DICT, _Marker, _predicate, _refine, _translate
+from ._translate import _DICT, _Marker, _nullary, _predicate, _refine, _translate
 
 
 def gt(bound: object) -> CompiledValidator:
@@ -153,6 +153,7 @@ def at_most_one_of(*candidates: object) -> CompiledValidator:
     return _predicate(lambda obj: _present(candidates, obj) <= 1)
 
 
+@_nullary
 def unique() -> CompiledValidator:
     """Require all elements of an iterable to be distinct."""
     return _predicate(_all_distinct)
