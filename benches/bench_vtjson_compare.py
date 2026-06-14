@@ -104,6 +104,22 @@ def shape_format() -> tuple[object, object, object]:
     return vt.regex(pattern), vg.regex(pattern), "0123456789abcdef01234567"
 
 
+def shape_prefix_tail() -> tuple[object, object, object]:
+    # A fixed prefix then a repeated tail: a str, then many ints ([str, int, ...]).
+    schema = [str, int, ...]
+    data = ["head", *range(ARRAY_LEN)]
+    return schema, schema, data
+
+
+def shape_heterogeneous() -> tuple[object, object, object]:
+    # A multi-clause map: str keys map to ints, int keys to bools (the
+    # worker_runs-style heterogeneous mapping, now expressible).
+    schema = {str: int, int: bool}
+    str_keyed = {f"k{i}": i for i in range(MAPPING_SIZE)}
+    int_keyed = dict.fromkeys(range(MAPPING_SIZE), True)
+    return schema, schema, {**str_keyed, **int_keyed}
+
+
 SHAPES = {
     "scalar": shape_scalar,
     "record": shape_record,
@@ -114,6 +130,8 @@ SHAPES = {
     "union": shape_union,
     "refinement": shape_refinement,
     "format": shape_format,
+    "prefix_tail": shape_prefix_tail,
+    "heterogeneous": shape_heterogeneous,
 }
 
 

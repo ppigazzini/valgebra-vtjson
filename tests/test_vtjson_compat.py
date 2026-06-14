@@ -207,8 +207,18 @@ def test_validate_lax_mode_and_subs():
         vg.validate(int, 5, subs={"x": int})  # subs is not supported
 
 
-def test_unsupported_forms_raise_with_a_clear_message():
-    with pytest.raises(NotImplementedError):
-        vg.validate([int, str, ...], [1, "x"])  # prefix + repeated tail
-    with pytest.raises(NotImplementedError):
-        vg.validate({int: int, str: str}, {})  # multiple schema-valued keys
+def test_prefix_tail_lists_and_heterogeneous_maps_are_supported():
+    # Previously-ledgered structural gaps, now expressible through valgebra.
+    # Prefix plus repeated tail: a str, then zero or more ints.
+    vg.validate([str, int, ...], ["x"])
+    vg.validate([str, int, ...], ["x", 1, 2])
+    with pytest.raises(vg.ValidationError):
+        vg.validate([str, int, ...], [1])  # the prefix must be a str
+    # Several schema-valued key clauses (each key matches its own value schema).
+    vg.validate({int: int, str: str}, {1: 2, "a": "b"})
+    with pytest.raises(vg.ValidationError):
+        vg.validate({int: int, str: str}, {1: "x"})
+    # A named key mixed with a key-schema catch-all.
+    vg.validate({"last_run": int, str: bool}, {"last_run": 5, "extra": True})
+    with pytest.raises(vg.ValidationError):
+        vg.validate({"last_run": int, str: bool}, {"extra": True})  # last_run required

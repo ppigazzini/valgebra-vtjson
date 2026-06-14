@@ -57,11 +57,29 @@ def _schemas() -> st.SearchStrategy[tuple[object, object]]:
         lambda child: st.one_of(
             child.map(lambda p: ([p[0]], [p[1]])),  # [T]
             child.map(lambda p: ([p[0], ...], [p[1], ...])),  # [T, ...]
+            st.tuples(child, child).map(
+                lambda ab: (
+                    [ab[0][0], ab[1][0], ...],
+                    [ab[0][1], ab[1][1], ...],
+                )
+            ),  # [A, B, ...] prefix plus repeated tail
             _HASHABLE.map(lambda p: ({p[0]}, {p[1]})),  # {T} (hashable inner)
             child.map(lambda p: ({str: p[0]}, {str: p[1]})),  # {str: V} mapping
             child.map(
                 lambda p: ({vt.regex(r"\d+"): p[0]}, {vg.regex(r"\d+"): p[1]})
             ),  # schema-key map
+            st.tuples(child, child).map(
+                lambda ab: (
+                    {str: ab[0][0], int: ab[1][0]},
+                    {str: ab[0][1], int: ab[1][1]},
+                )
+            ),  # {str: V1, int: V2} multi-clause map (disjoint key types)
+            st.tuples(child, child).map(
+                lambda ab: (
+                    {"a": ab[0][0], int: ab[1][0]},
+                    {"a": ab[0][1], int: ab[1][1]},
+                )
+            ),  # {"a": V1, int: V2} named field plus a key-schema catch-all
             st.tuples(child, child).map(
                 lambda ab: ((ab[0][0], ab[1][0]), (ab[0][1], ab[1][1]))
             ),  # tuple
@@ -100,7 +118,9 @@ def _values() -> st.SearchStrategy[object]:
         lambda child: st.one_of(
             st.lists(child, max_size=4),
             st.tuples(child, child),
-            st.dictionaries(st.text(max_size=3), child, max_size=3),
+            st.dictionaries(
+                st.one_of(st.text(max_size=3), st.integers(-5, 5)), child, max_size=3
+            ),
             st.frozensets(st.integers(), max_size=3),
         ),
         max_leaves=8,

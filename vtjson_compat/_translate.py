@@ -8,7 +8,6 @@ meaning is expressed with the algebra so the accept/reject decision matches.
 
 import importlib
 from collections.abc import Callable
-from types import GenericAlias
 from typing import Annotated
 
 from valgebra._valgebra import CompiledValidator
@@ -128,13 +127,13 @@ def _translate_type(schema: type) -> CompiledValidator:
 
 
 def _translate_list(schema: list) -> CompiledValidator:
-    # vtjson: `[T, ...]` is a homogeneous list; `[A, B, C]` is a fixed-length
-    # list matched positionally; `[]` matches only the empty list.
+    # vtjson: a trailing `...` repeats the element just before it, so `[T, ...]`
+    # is a homogeneous list and `[A, ..., Z, ...]` is a fixed prefix then the last
+    # element repeated; `[A, B, C]` is a fixed-length positional list; `[]`
+    # matches only the empty list. valgebra's native list form expresses each.
     if schema and schema[-1] is Ellipsis:
-        if len(schema) == 2:  # noqa: PLR2004
-            return _validator([_translate(schema[0])])
-        msg = "the prefix-plus-repeated-tail list form [A, B, ...] is not supported yet"
-        raise NotImplementedError(msg)
+        prefix = [_translate(item) for item in schema[:-1]]
+        return _validator([*prefix, ...])
     return _fixed_sequence(*(_translate(item) for item in schema))
 
 
@@ -162,26 +161,13 @@ def _translate_set(schema: set) -> CompiledValidator:
 def _translate_dict(schema: dict) -> CompiledValidator:
     if not schema:
         return _validator({})
-    # All-string keys: a record, optionality via the "key?" convention.
-    if all(isinstance(key, str) for key in schema):
-        record = {key: _translate(value) for key, value in schema.items()}
-        return _validator(record)
-    # A single key-pattern entry is a mapping: every key matches the key schema
-    # and its value the value schema. valgebra's dict[K, V] accepts an arbitrary
-    # key schema, so a type key and a schema key (e.g. a regex) are handled the
-    # same way.
-    if len(schema) == 1:
-        (key,) = schema
-        # GenericAlias builds dict[K, V] at runtime; the element schemas are
-        # validators, not static type expressions.
-        mapping = GenericAlias(_DICT, (_translate(key), _translate(schema[key])))
-        return _validator(mapping)
-    # Several key-pattern clauses, or named keys mixed with a key-pattern
-    # catch-all, need a heterogeneous mapping (different value schemas for
-    # different key patterns) that valgebra cannot express; see the ledger.
-    msg = (
-        "a dict with several key-pattern clauses, or named keys mixed with a "
-        "key-pattern catch-all, is not supported: valgebra has no heterogeneous "
-        "mapping"
-    )
-    raise NotImplementedError(msg)
+    # A string key is a record field (a trailing "?" marks it optional); any
+    # other key is a schema constraining the rest. valgebra's native dict form
+    # combines both — named fields plus one or more key-pattern catch-all clauses
+    # — so records, single mappings, multi-clause maps, and a record mixed with a
+    # catch-all all translate uniformly.
+    translated = {
+        (key if isinstance(key, str) else _translate(key)): _translate(value)
+        for key, value in schema.items()
+    }
+    return _validator(translated)

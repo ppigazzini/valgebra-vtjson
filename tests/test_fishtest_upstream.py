@@ -7,10 +7,10 @@ schema-construct namespace (the same constructs, from vtjson on one side and the
 compatibility layer on the other), and checks that the two agree on a document
 corpus.
 
-The test skips when offline. Every string-keyed schema and five of the six
-schema-keyed tables reach identical decisions; the sixth (worker_runs) keys a
-value by a mixed record-plus-catch-all that valgebra cannot express and is
-asserted to be the one ledgered gap (docs/migrating-from-vtjson.md).
+The test skips when offline. Every string-keyed schema and all six schema-keyed
+tables — including worker_runs, whose value mixes a named key with a key-schema
+catch-all (a heterogeneous map valgebra now expresses) — reach identical
+accept/reject decisions.
 """
 
 from __future__ import annotations
@@ -41,26 +41,21 @@ _CONSTRUCTS = [
     "set_label", "set_name", "size", "union", "unique",
 ]  # fmt: skip
 
-# Top-level schemas with string keys (the compat layer's supported shape). The
-# mapping-keyed schemas (cache/wtt_map/connections_counter/unfinished_runs/
-# worker_runs/books) use schema-valued keys and are exercised only to confirm
-# they are cleanly reported as unsupported.
+# Top-level schemas with string keys.
 _STRING_KEYED = [
     "pgns_schema", "user_schema", "kvstore_schema", "worker_schema", "nn_schema",
     "contributors_schema", "action_schema", "results_schema", "api_access_schema",
     "api_schema", "runs_schema",
 ]  # fmt: skip
 
-# Schemas that key a dict (or set) by a *schema*, not by string literals. Five of
-# the six now translate (a single key-schema → value-schema clause, or a
-# single-element set). worker_runs keys a dict whose *value* mixes a named key
-# with a key-schema catch-all — a heterogeneous mapping valgebra cannot express;
-# it is the one ledgered gap, asserted unsupported below.
+# Schemas that key a dict (or set) by a *schema*, not by string literals. All six
+# translate and conform: single key-schema clauses, a single-element set, and —
+# since valgebra grew heterogeneous maps — worker_runs, whose value mixes a named
+# key with a key-schema catch-all.
 _MAPPING_KEYED = [
     "cache_schema", "wtt_map_schema", "connections_counter_schema",
-    "books_schema", "unfinished_runs_schema",
+    "books_schema", "unfinished_runs_schema", "worker_runs_schema",
 ]  # fmt: skip
-_HETEROGENEOUS = "worker_runs_schema"
 
 # A 24-hex string is a valid ObjectId, so a valid run_id / book / worker key.
 _OID = "0123456789abcdef01234567"
@@ -80,6 +75,12 @@ _MAPPING_CORPUS: dict[str, list[object]] = {
     "unfinished_runs_schema": [set(), {_OID}, {"bad"}, {123}],
     "cache_schema": [{}, {"x": {}}, {_OID: "not-a-dict"}],
     "books_schema": [{}, {123: {}}, {"book.epd": "not-a-dict"}],
+    "worker_runs_schema": [
+        {}, {"host-4cores-abcd": {_OID: True, "last_run": _OID}},
+        {"host-4cores-abcd": {_OID: 5, "last_run": _OID}},
+        {"host-4cores-abcd": {_OID: True, "last_run": "short"}},
+        {"host-4cores-abcd": {"not-hex": True, "last_run": _OID}},
+    ],
 }  # fmt: skip
 
 _SUPPORTED_ARCHES = [
@@ -154,7 +155,7 @@ def _build(lib: object, source: str) -> dict:
         ),
     )
     exec(compile(source, "<fishtest_schemas>", "exec"), namespace)  # noqa: S102
-    wanted = [*_STRING_KEYED, *_MAPPING_KEYED, _HETEROGENEOUS]
+    wanted = [*_STRING_KEYED, *_MAPPING_KEYED]
     return {name: namespace[name] for name in wanted if name in namespace}
 
 
@@ -235,7 +236,7 @@ def test_fishtest_upstream_parity() -> None:
 
 
 def test_fishtest_upstream_mapping_keyed_parity() -> None:
-    """The five schema-keyed tables translate and agree with vtjson."""
+    """All six schema-keyed tables translate and agree with vtjson."""
     source = _fetch_source()
     if source is None:
         pytest.skip("the fishtest schema source is not reachable (offline)")
@@ -261,18 +262,3 @@ def test_fishtest_upstream_mapping_keyed_parity() -> None:
 
     assert checked > 0, "no mapping-keyed schema/document pairs were checked"
     assert accepted > 0, "no accept path was exercised; the corpus is too weak"
-
-
-def test_fishtest_worker_runs_is_the_one_ledgered_gap() -> None:
-    """worker_runs keys a value by a mixed record+catch-all: unsupported, ledgered."""
-    source = _fetch_source()
-    if source is None:
-        pytest.skip("the fishtest schema source is not reachable (offline)")
-    try:
-        vg_schemas = _build(vg, source)
-    except ImportError as exc:
-        pytest.skip(f"optional dependency missing: {exc}")
-    if _HETEROGENEOUS not in vg_schemas:
-        pytest.skip(f"{_HETEROGENEOUS} absent from the fetched schemas")
-    with pytest.raises(NotImplementedError):
-        vg.validate(vg_schemas[_HETEROGENEOUS], {})
