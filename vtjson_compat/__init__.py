@@ -18,8 +18,9 @@ module is the public surface.
 
 Currently supported: scalars (with the ``float``/``float_`` mapping), ``None``,
 constants, ``anything``/``nothing``, ``union``/``intersect``/``complement``,
-homogeneous ``[T, ...]`` and fixed-length ``[A, B]`` lists, fixed and variadic
-tuples, single-element sets, records (with the ``"key?"`` optional convention),
+homogeneous ``[T, ...]``, prefix-plus-tail ``[A, B, ...]``, and fixed-length
+``[A, B]`` lists, the same three tuple shapes, single- and multi-element sets,
+records (with the ``"key?"`` optional convention),
 ``{KeyType: ValueType}`` mappings, the comparison and size refinements
 (``gt``/``ge``/``lt``/``le``/``interval``/``size``), ``ifthen``/``cond``, the
 dict-key modifiers (``keys``/``one_of``/``at_least_one_of``/``at_most_one_of``),

@@ -63,12 +63,14 @@ where valgebra deliberately decides differently because vtjson is wrong.
 | Raising predicate | swallowed into a generic failure | surfaced as a distinct `predicate_error` | A crashing predicate is now visible; fix the predicate. |
 | `Apply` / `skip_first` | reorder how `Annotated` arguments apply | not supported (the layer applies `Annotated` metadata in declaration order) | Reorder the `Annotated` arguments instead; valgebra has no apply-order modifier. |
 
-The prefix-plus-repeated-tail list `[A, B, ...]` and heterogeneous mappings
-(several key-schema → value-schema clauses, or a named key mixed with a
-key-schema catch-all, e.g. `{str: int, int: str}` or `{"name": str, str: int}`)
-were once recorded here as unsupported. valgebra has since grown a
-sequence-regex node and a keyed-default mapping node, so both now translate with
-exact parity and are no longer divergences.
+The prefix-plus-repeated-tail list `[A, B, ...]`, the matching tuple shapes
+(`(T, ...)` and `(A, B, ...)`), multi-element sets (`{A, B}`, where every member
+matches `A` or `B`), and heterogeneous mappings (several key-schema →
+value-schema clauses, or a named key mixed with a key-schema catch-all, e.g.
+`{str: int, int: str}` or `{"name": str, str: int}`) were once recorded here as
+unsupported. valgebra has since grown a sequence-regex node (now wired through
+the tuple frontend as well) and a keyed-default mapping node, so all of them
+translate with exact parity and are no longer divergences.
 
 ## Conformance against fishtest
 

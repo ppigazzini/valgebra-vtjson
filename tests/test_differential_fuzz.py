@@ -64,6 +64,9 @@ def _schemas() -> st.SearchStrategy[tuple[object, object]]:
                 )
             ),  # [A, B, ...] prefix plus repeated tail
             _HASHABLE.map(lambda p: ({p[0]}, {p[1]})),  # {T} (hashable inner)
+            st.tuples(_HASHABLE, _HASHABLE).map(
+                lambda ab: ({ab[0][0], ab[1][0]}, {ab[0][1], ab[1][1]})
+            ),  # {A, B} multi-element set (every member matches A or B)
             child.map(lambda p: ({str: p[0]}, {str: p[1]})),  # {str: V} mapping
             child.map(
                 lambda p: ({vt.regex(r"\d+"): p[0]}, {vg.regex(r"\d+"): p[1]})
@@ -82,7 +85,14 @@ def _schemas() -> st.SearchStrategy[tuple[object, object]]:
             ),  # {"a": V1, int: V2} named field plus a key-schema catch-all
             st.tuples(child, child).map(
                 lambda ab: ((ab[0][0], ab[1][0]), (ab[0][1], ab[1][1]))
-            ),  # tuple
+            ),  # (A, B) fixed-length tuple
+            child.map(lambda p: ((p[0], ...), (p[1], ...))),  # (T, ...) tuple
+            st.tuples(child, child).map(
+                lambda ab: (
+                    (ab[0][0], ab[1][0], ...),
+                    (ab[0][1], ab[1][1], ...),
+                )
+            ),  # (A, B, ...) prefix plus repeated tail tuple
             st.tuples(child, child).map(
                 lambda ab: (
                     {"a": ab[0][0], "b?": ab[1][0]},

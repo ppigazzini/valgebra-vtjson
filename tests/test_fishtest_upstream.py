@@ -45,7 +45,7 @@ _CONSTRUCTS = [
 _STRING_KEYED = [
     "pgns_schema", "user_schema", "kvstore_schema", "worker_schema", "nn_schema",
     "contributors_schema", "action_schema", "results_schema", "api_access_schema",
-    "api_schema", "runs_schema",
+    "api_schema", "runs_schema", "worker_info_schema_api", "worker_info_schema_runs",
 ]  # fmt: skip
 
 # Schemas that key a dict (or set) by a *schema*, not by string literals. All six
@@ -59,6 +59,19 @@ _MAPPING_KEYED = [
 
 # A 24-hex string is a valid ObjectId, so a valid run_id / book / worker key.
 _OID = "0123456789abcdef01234567"
+
+# A worker-info document valid under worker_info_schema_api; the _runs variant
+# adds remote_addr and country_code. Both sides accept it, exercising the accept
+# path of these two schemas.
+_WORKER_INFO_API = {
+    "uname": "Linux", "architecture": ["64bit", "ELF"], "concurrency": 4,
+    "max_memory": 8192, "min_threads": 1, "username": "user1", "version": 100,
+    "python_version": [3, 14, 0], "gcc_version": [13, 2, 0], "compiler": "g++",
+    "unique_key": "12345678-1234-5678-1234-567812345678", "modified": False,
+    "worker_arch": "unknown", "ARCH": "x86_64", "nps": 1000000.0,
+    "near_github_api_limit": False,
+}  # fmt: skip
+_WORKER_INFO_RUNS = {**_WORKER_INFO_API, "remote_addr": "1.2.3.4", "country_code": "?"}
 
 # Per-schema documents, chosen so vtjson and the compat layer must agree. Each
 # corpus exercises an accepted shape (often the empty mapping/set) and rejected
@@ -196,6 +209,8 @@ def _corpus() -> list[object]:
             "last_updated": dt.datetime(2020, 1, 1, tzinfo=dt.UTC),
         },
         {"username": "", "password": "x"},  # invalid: username too short
+        _WORKER_INFO_API,  # valid worker_info_schema_api
+        _WORKER_INFO_RUNS,  # valid worker_info_schema_runs
     ]
 
 
@@ -262,3 +277,24 @@ def test_fishtest_upstream_mapping_keyed_parity() -> None:
 
     assert checked > 0, "no mapping-keyed schema/document pairs were checked"
     assert accepted > 0, "no accept path was exercised; the corpus is too weak"
+
+
+def test_fishtest_covers_every_schema() -> None:
+    """Every schema in the fishtest source is exercised — none silently untested.
+
+    The tested set must equal the set of top-level ``*schema*`` definitions in the
+    fetched source, so a future fishtest release that adds (or renames) a schema
+    fails this test until it is classified and given a document corpus.
+    """
+    source = _fetch_source()
+    if source is None:
+        pytest.skip("the fishtest schema source is not reachable (offline)")
+    in_source = set(re.findall(r"^(\w*schema\w*)\s*=", source, re.MULTILINE))
+    tested = set(_STRING_KEYED) | set(_MAPPING_KEYED)
+    assert in_source, "no schemas parsed from the fishtest source"
+    assert in_source - tested == set(), (
+        f"untested fishtest schemas: {sorted(in_source - tested)}"
+    )
+    assert tested - in_source == set(), (
+        f"tested names absent from the source: {sorted(tested - in_source)}"
+    )

@@ -118,12 +118,10 @@ def _translate_type(schema: type) -> CompiledValidator:
         return builder()
     if schema is type(None):
         return _validator(None)
-    try:
-        # dataclasses, NamedTuples, Enums, TypedDicts, runtime Protocols.
-        return _validator(schema)
-    except NotImplementedError:
-        # Any other class: an isinstance check, as vtjson does for a bare type.
-        return _validator(Annotated[object, lambda value: isinstance(value, schema)])
+    # Any other class translates directly: valgebra reads dataclasses, NamedTuples,
+    # Enums, TypedDicts, and runtime Protocols structurally, and a bare class as an
+    # instance check — the isinstance semantics vtjson gives a plain type.
+    return _validator(schema)
 
 
 def _translate_list(schema: list) -> CompiledValidator:
@@ -138,24 +136,25 @@ def _translate_list(schema: list) -> CompiledValidator:
 
 
 def _translate_tuple(schema: tuple) -> CompiledValidator:
-    if len(schema) >= 1 and schema[-1] is Ellipsis:
-        if len(schema) != 2:  # noqa: PLR2004
-            msg = "only the homogeneous tuple form (T, ...) is supported so far"
-            raise NotImplementedError(msg)
-        # The typing form builds a variadic tuple; a raw `(T, ...)` tuple would
-        # be read as a fixed pair whose second element must equal Ellipsis. The
-        # subscription is used at runtime to drive the frontend, not as a type.
-        element = _translate(schema[0])
-        return _validator(tuple[element, ...])  # ty: ignore[invalid-type-form]
+    # vtjson reads a trailing `...` as it does for lists: the element before it
+    # repeats after a fixed prefix. valgebra's frontend expresses every tuple
+    # shape, so `(T, ...)`, the prefix form `(A, B, ...)`, and the fixed-length
+    # `(A, B, C)` all translate. The subscription drives the frontend at runtime,
+    # not as a static type.
+    if schema and schema[-1] is Ellipsis:
+        args = (*(_translate(item) for item in schema[:-1]), Ellipsis)
+        return _validator(tuple[args])  # ty: ignore[invalid-type-form]
     return _validator(tuple(_translate(item) for item in schema))
 
 
 def _translate_set(schema: set) -> CompiledValidator:
-    if len(schema) != 1:
-        msg = "only the single-element set form {T} is supported so far"
-        raise NotImplementedError(msg)
-    (element,) = schema
-    return _validator({_translate(element)})
+    # vtjson reads a set schema as "every element matches one of these schemas":
+    # a single element is homogeneous, several union, and the empty set `set()`
+    # matches only the empty set. valgebra expresses each as a set of the union
+    # of the element schemas (an empty union is the uninhabited element type, so
+    # `set()` becomes the set whose only member is the empty set).
+    element = _union(*(_translate(item) for item in schema))
+    return _validator({element})
 
 
 def _translate_dict(schema: dict) -> CompiledValidator:
