@@ -14,9 +14,8 @@ import pathlib
 import re
 from urllib.parse import urlparse
 
-from valgebra._valgebra import CompiledValidator
-
 from ._translate import _nullary, _predicate, _require
+from ._valgebra_api import CompiledValidator
 
 
 def regex(

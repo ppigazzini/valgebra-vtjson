@@ -11,31 +11,31 @@ import math
 from types import EllipsisType
 from typing import get_type_hints
 
-from valgebra import _derived
-from valgebra._valgebra import (
+from ._translate import _DICT, _Marker, _nullary, _predicate, _refine, _translate
+from ._valgebra_api import (
     CompiledValidator,
     anything,
 )
-from valgebra._valgebra import (
+from ._valgebra_api import (
     complement as _complement,
 )
-from valgebra._valgebra import (
+from ._valgebra_api import cond as _derived_cond
+from ._valgebra_api import ifthen as _derived_ifthen
+from ._valgebra_api import (
     intersect as _intersect,
 )
-from valgebra._valgebra import (
+from ._valgebra_api import (
     lax as _lax,
 )
-from valgebra._valgebra import (
+from ._valgebra_api import (
     strict as _strict,
 )
-from valgebra._valgebra import (
+from ._valgebra_api import (
     union as _union,
 )
-from valgebra._valgebra import (
+from ._valgebra_api import (
     validator as _validator,
 )
-
-from ._translate import _DICT, _Marker, _nullary, _predicate, _refine, _translate
 
 
 def gt(bound: object) -> CompiledValidator:
@@ -106,7 +106,7 @@ def ifthen(
     otherwise: object = anything,
 ) -> CompiledValidator:
     """Require ``then`` when a value matches ``condition``, else ``otherwise``."""
-    return _derived.ifthen(
+    return _derived_ifthen(
         _translate(condition), _translate(then), _translate(otherwise)
     )
 
@@ -117,7 +117,7 @@ def cond(
 ) -> CompiledValidator:
     """Select the ``then`` of the first matching ``(condition, then)`` case."""
     translated = [(_translate(c), _translate(t)) for c, t in cases]
-    return _derived.cond(*translated, default=_translate(default))
+    return _derived_cond(*translated, default=_translate(default))
 
 
 def float_() -> CompiledValidator:
@@ -302,7 +302,7 @@ def make_type(
 
 def safe_cast(schema: object, obj: object) -> object:
     """Validate ``obj`` against ``schema`` and return it unchanged."""
-    return _translate(schema).cast(obj)
+    return _translate(schema).ensure(obj)
 
 
 def lax(schema: object) -> CompiledValidator:

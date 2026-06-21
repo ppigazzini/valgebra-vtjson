@@ -10,14 +10,14 @@ import importlib
 from collections.abc import Callable
 from typing import Annotated
 
-from valgebra._valgebra import CompiledValidator
-from valgebra._valgebra import (
+from ._valgebra_api import CompiledValidator
+from ._valgebra_api import (
     fixed_sequence as _fixed_sequence,
 )
-from valgebra._valgebra import (
+from ._valgebra_api import (
     union as _union,
 )
-from valgebra._valgebra import (
+from ._valgebra_api import (
     validator as _validator,
 )
 
@@ -144,7 +144,10 @@ def _translate_tuple(schema: tuple) -> CompiledValidator:
     if schema and schema[-1] is Ellipsis:
         args = (*(_translate(item) for item in schema[:-1]), Ellipsis)
         return _validator(tuple[args])  # ty: ignore[invalid-type-form]
-    return _validator(tuple(_translate(item) for item in schema))
+    # valgebra reads a fixed-length tuple as the subscription `tuple[A, B]`, not a
+    # tuple literal, so build the generic alias from the translated elements.
+    fixed = tuple(_translate(item) for item in schema)
+    return _validator(tuple[fixed])  # ty: ignore[invalid-type-form]
 
 
 def _translate_set(schema: set) -> CompiledValidator:
@@ -154,7 +157,7 @@ def _translate_set(schema: set) -> CompiledValidator:
     # of the element schemas (an empty union is the uninhabited element type, so
     # `set()` becomes the set whose only member is the empty set).
     element = _union(*(_translate(item) for item in schema))
-    return _validator({element})
+    return _validator(set[element])  # ty: ignore[invalid-type-form]
 
 
 def _translate_dict(schema: dict) -> CompiledValidator:

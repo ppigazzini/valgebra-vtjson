@@ -43,17 +43,6 @@ the ``dict=`` parameter of ``protocol``, the ``format=`` parameter of
 vtjson's spelling for mechanical migration.
 """
 
-from valgebra._valgebra import CompiledValidator, ValidationError
-from valgebra._valgebra import (
-    anything as _anything,
-)
-from valgebra._valgebra import (
-    lax as _lax,
-)
-from valgebra._valgebra import (
-    nothing as _nothing,
-)
-
 from ._constructs import (
     at_least_one_of,
     at_most_one_of,
@@ -99,6 +88,16 @@ from ._formats import (
     url,
 )
 from ._translate import _translate
+from ._valgebra_api import CompiledValidator, ValidationError
+from ._valgebra_api import (
+    anything as _anything,
+)
+from ._valgebra_api import (
+    lax as _lax,
+)
+from ._valgebra_api import (
+    nothing as _nothing,
+)
 
 # The lattice top and bottom, re-exported under the vtjson names.
 anything = _anything
