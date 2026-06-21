@@ -40,11 +40,11 @@ mapping and the ledger of intentional behavioral differences.
 
 Translating a vtjson schema onto valgebra's Rust core makes the same schema
 validate much faster than under pure-Python vtjson, with the same accept/reject
-decision. On a synthetic benchmark (compile-once on both sides, release build of
-valgebra), valgebra is ~7x faster on a 50-field record and ~17x–42x faster on
-mappings, nested records, and large arrays. Numbers, method, and limits are in
-[docs/performance.md](docs/performance.md); reproduce with
-`uv run --group bench pytest benches/`.
+decision. On a synthetic benchmark (compile-once on both sides, against the
+LTO+PGO release wheel of valgebra), valgebra is ~14x faster on a 50-field record
+and ~21x–29x faster on nested records, deep nesting, large arrays, and unions.
+Numbers, method, and limits are in
+[docs/performance.md](docs/performance.md).
 
 ## Development
 
