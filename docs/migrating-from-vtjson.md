@@ -33,12 +33,13 @@ The compatibility surface mirrors vtjson's names: `validate`, the combinators
 ## Optional extras
 
 Some validators reuse the same third-party packages vtjson uses. They are not
-valgebra runtime dependencies; install the extra that you need:
+valgebra runtime dependencies; select the extra that you need when installing
+from the Git repository:
 
-- `pip install "valgebra-vtjson[formats]"` — `email` and `domain_name`
-  (`email-validator`, `idna`, `dnspython`).
-- `pip install "valgebra-vtjson[magic]"` — `magic` (`python-magic`, which needs
-  the system libmagic library).
+- `[formats]` — `email` and `domain_name` (`email-validator`, `idna`,
+  `dnspython`).
+- `[magic]` — `magic` (`python-magic`, which needs the system libmagic
+  library).
 
 Calling one of these validators without its extra installed raises a clear
 `ImportError` that names the extra. vtjson installs these heavy dependencies

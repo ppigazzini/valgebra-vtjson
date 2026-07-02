@@ -13,11 +13,14 @@ downstream concern, kept in its own repo with its own tests and dependencies.
 
 ## Install
 
+valgebra-vtjson is not on PyPI; install it from the Git repository. valgebra
+itself resolves from PyPI as a normal dependency.
+
 ```bash
-pip install valgebra-vtjson
+pip install "valgebra-vtjson @ git+https://github.com/ppigazzini/valgebra-vtjson"
 # optional network/format validators:
-pip install "valgebra-vtjson[formats]"   # email, domain_name
-pip install "valgebra-vtjson[magic]"     # magic (needs system libmagic)
+pip install "valgebra-vtjson[formats] @ git+https://github.com/ppigazzini/valgebra-vtjson"   # email, domain_name
+pip install "valgebra-vtjson[magic] @ git+https://github.com/ppigazzini/valgebra-vtjson"     # magic (needs system libmagic)
 ```
 
 ## Use
@@ -48,8 +51,7 @@ Numbers, method, and limits are in
 
 ## Development
 
-This repo resolves `valgebra` from a sibling checkout (`../valgebra`). With both
-repos cloned side by side:
+`uv sync` installs `valgebra` from PyPI alongside the dev tooling:
 
 ```bash
 uv sync
