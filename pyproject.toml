@@ -24,7 +24,7 @@ classifiers = [
     "Topic :: Software Development :: Quality Assurance",
     "Typing :: Typed",
 ]
-dependencies = ["valgebra"]
+dependencies = ["valgebra>=0.0.2"]
 
 [project.optional-dependencies]
 # The network format validators (email, domain_name) reuse the same engines the
@@ -35,11 +35,6 @@ magic = ["python-magic>=0.4"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["vtjson_compat"]
-
-# Local development resolves valgebra from the sibling working tree; CI checks
-# the valgebra repo out at the same relative path before `uv sync`.
-[tool.uv.sources]
-valgebra = { path = "../valgebra", editable = true }
 
 [dependency-groups]
 dev = [
