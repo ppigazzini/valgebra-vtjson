@@ -1,0 +1,108 @@
+[build-system]
+requires = ["hatchling>=1.31.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "valgebra-vtjson"
+version = "0.0.0"
+requires-python = ">=3.10"
+description = "vtjson interoperability layer for valgebra: read vtjson-style schemas and validate them through valgebra, proven by a differential suite."
+readme = "README.md"
+license = "MIT OR Apache-2.0"
+license-files = ["LICENSE-MIT", "LICENSE-APACHE"]
+keywords = ["validation", "schema", "vtjson", "valgebra", "compatibility"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development :: Quality Assurance",
+    "Typing :: Typed",
+]
+dependencies = ["valgebra>=0.0.3"]
+
+[project.optional-dependencies]
+# The network format validators (email, domain_name) reuse the same engines the
+# upstream library uses; they are not needed for the rest of the layer.
+formats = ["email-validator>=2.3.0", "idna>=3.18", "dnspython>=2.8.0"]
+# python-magic (and the system libmagic library) backs the `magic` validator.
+magic = ["python-magic>=0.4.27"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["vtjson_compat"]
+
+[dependency-groups]
+dev = [
+    "annotated-types>=0.7",
+    "hypothesis>=6.156.4",
+    "pytest>=9.1.1",
+    "ruff>=0.15.20",
+    "ty>=0.0.57",
+    "vtjson>=2.3.0",
+    "email-validator>=2.3.0",
+    "idna>=3.18",
+    "dnspython>=2.8.0",
+    "python-magic>=0.4.27",
+]
+# Benchmark-only tooling: the wall-clock harness. vtjson is already a dev
+# dependency (the parity oracle), so the comparison needs nothing more.
+bench = [
+    "pytest-benchmark>=5.2.3",
+]
+
+[tool.pytest.ini_options]
+minversion = "9.0"
+testpaths = ["tests"]
+addopts = ["-ra", "--strict-markers", "--strict-config"]
+xfail_strict = true
+
+[tool.ruff]
+target-version = "py310"
+src = ["vtjson_compat", "tests"]
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    "COM812",
+    "ISC001",
+    "D100",
+    "D101",
+    "D102",
+    "D103",
+    "D104",
+    "D105",
+    "D107",
+    "D203",
+    "D213",
+    "ANN",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = [
+    "S101",
+    "PLR2004",
+    "ARG001",
+    "INP001",
+    "FBT003",
+    "EM101",
+    "TRY003",
+    "ERA001",
+]
+# Benchmarks assert results, use magic sizes, and are not a package.
+"benches/**" = ["S101", "PLR2004", "INP001"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["vtjson_compat"]
+
+[tool.ty.environment]
+python-version = "3.14"
+
+[tool.ty.src]
+# Benchmarks are a measurement harness, not the typed surface; they import the
+# optional bench dependency group, absent in the type-check lane.
+exclude = ["benches"]

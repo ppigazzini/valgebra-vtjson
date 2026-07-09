@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main, github_ci]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  differential:
+    name: differential (vtjson parity)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          enable-cache: true
+      # libmagic backs the `magic` validator's differential test.
+      - run: sudo apt-get update && sudo apt-get install -y libmagic1
+      # valgebra installs as a published wheel from PyPI.
+      - name: Sync
+        run: uv sync
+      - name: Lint
+        run: |
+          uv run ruff check
+          uv run ruff format --check
+          uv run ty check
+      # The layer must agree with pinned vtjson on every supported construct.
+      # A new divergence without a ledger entry fails here.
+      - name: Differential parity against pinned vtjson
+        run: uv run pytest -v
+      # Smoke-run the vtjson-versus-valgebra benchmark with timing disabled so
+      # the comparison suite keeps working; its numbers live in the performance
+      # page. The files are named bench_*, so override the collection pattern.
+      - name: Smoke-run the benchmarks
+        run: >
+          uv run --group bench pytest benches/
+          -o python_files="bench_*.py" --benchmark-disable -q
