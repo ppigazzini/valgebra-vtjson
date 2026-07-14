@@ -24,7 +24,7 @@ classifiers = [
     "Topic :: Software Development :: Quality Assurance",
     "Typing :: Typed",
 ]
-dependencies = ["valgebra>=0.0.3"]
+dependencies = ["valgebra>=0.0.4"]
 
 [project.optional-dependencies]
 # The network format validators (email, domain_name) reuse the same engines the
@@ -39,10 +39,10 @@ packages = ["vtjson_compat"]
 [dependency-groups]
 dev = [
     "annotated-types>=0.7",
-    "hypothesis>=6.156.4",
+    "hypothesis>=6.156.6",
     "pytest>=9.1.1",
-    "ruff>=0.15.20",
-    "ty>=0.0.57",
+    "ruff>=0.15.21",
+    "ty>=0.0.59",
     "vtjson>=2.3.0",
     "email-validator>=2.3.0",
     "idna>=3.18",
