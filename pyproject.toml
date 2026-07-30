@@ -38,11 +38,11 @@ packages = ["vtjson_compat"]
 
 [dependency-groups]
 dev = [
-    "annotated-types>=0.7",
-    "hypothesis>=6.156.6",
+    "annotated-types>=0.8",
+    "hypothesis>=6.164.0",
     "pytest>=9.1.1",
-    "ruff>=0.15.21",
-    "ty>=0.0.59",
+    "ruff>=0.16.0",
+    "ty>=0.0.65",
     "vtjson>=2.3.0",
     "email-validator>=2.3.0",
     "idna>=3.18",
@@ -80,6 +80,7 @@ ignore = [
     "D203",
     "D213",
     "ANN",
+    "CPY001",
 ]
 
 [tool.ruff.lint.per-file-ignores]

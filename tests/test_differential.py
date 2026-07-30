@@ -271,9 +271,11 @@ LEDGER: list[tuple[str, object, object, object, str]] = [
         1,
         1,
         True,
-        "vtjson accepts True for the constant 1 (Python ==, which conflates "
-        "bool and int); valgebra rejects it — a literal is a typed singleton, "
-        "and bool is not int",
+        (
+            "vtjson accepts True for the constant 1 (Python ==, which conflates "
+            "bool and int); valgebra rejects it — a literal is a typed "
+            "singleton, and bool is not int"
+        ),
     ),
 ]
 
