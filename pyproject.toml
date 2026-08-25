@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling>=1.31.0"]
+requires = ["hatchling>=1.32.0"]
 build-backend = "hatchling.build"
 
 [project]
@@ -24,12 +24,12 @@ classifiers = [
     "Topic :: Software Development :: Quality Assurance",
     "Typing :: Typed",
 ]
-dependencies = ["valgebra>=0.0.6"]
+dependencies = ["valgebra>=0.0.7"]
 
 [project.optional-dependencies]
 # The network format validators (email, domain_name) reuse the same engines the
 # upstream library uses; they are not needed for the rest of the layer.
-formats = ["email-validator>=2.3.0", "idna>=3.18", "dnspython>=2.8.0"]
+formats = ["email-validator>=2.3.0", "idna>=3.19", "dnspython>=2.8.0"]
 # python-magic (and the system libmagic library) backs the `magic` validator.
 magic = ["python-magic>=0.4.27"]
 
@@ -39,20 +39,20 @@ packages = ["vtjson_compat"]
 [dependency-groups]
 dev = [
     "annotated-types>=0.8",
-    "hypothesis>=6.165.2",
+    "hypothesis>=6.165.10",
     "pytest>=9.1.1",
-    "ruff>=0.16.2",
-    "ty>=0.0.69",
+    "ruff>=0.16.4",
+    "ty>=0.0.74",
     "vtjson>=2.3.0",
     "email-validator>=2.3.0",
-    "idna>=3.18",
+    "idna>=3.19",
     "dnspython>=2.8.0",
     "python-magic>=0.4.27",
 ]
 # Benchmark-only tooling: the wall-clock harness. vtjson is already a dev
 # dependency (the parity oracle), so the comparison needs nothing more.
 bench = [
-    "pytest-benchmark>=5.2.3",
+    "pytest-benchmark>=5.3.0",
 ]
 
 [tool.pytest.ini_options]
