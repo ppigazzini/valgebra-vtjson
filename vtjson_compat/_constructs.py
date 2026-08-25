@@ -8,6 +8,7 @@ cannot handle, mirroring vtjson's reject.
 """
 
 import math
+from collections.abc import Callable, Mapping
 from types import EllipsisType
 from typing import get_type_hints
 
@@ -64,10 +65,16 @@ def interval(
     strict_lower: bool = False,  # noqa: FBT001, FBT002
     strict_upper: bool = False,  # noqa: FBT001, FBT002
 ) -> CompiledValidator:
-    """Values in the interval between ``lower`` and ``upper``."""
+    """Values in the interval between ``lower`` and ``upper``.
+
+    Following vtjson, ``...`` on either end means that end is unbounded, so the
+    bound is omitted rather than compared against the sentinel.
+    """
     bounds: dict[str, object] = {}
-    bounds["gt" if strict_lower else "ge"] = lower
-    bounds["lt" if strict_upper else "le"] = upper
+    if lower is not Ellipsis:
+        bounds["gt" if strict_lower else "ge"] = lower
+    if upper is not Ellipsis:
+        bounds["lt" if strict_upper else "le"] = upper
     return _refine(_Marker(**bounds))
 
 
@@ -125,32 +132,45 @@ def float_() -> CompiledValidator:
     return _validator(float)
 
 
-def _present(candidates: tuple[object, ...], obj: object) -> int:
-    """Count how many candidates are members of ``obj`` (by ``in``)."""
-    try:
-        return sum(1 for k in candidates if k in obj)  # ty: ignore[unsupported-operator]
-    except TypeError:
-        return 0
+def _present(candidates: tuple[object, ...], obj: object) -> int | None:
+    """Count how many candidates are keys of ``obj``, or ``None`` if it has none.
+
+    The dict-key modifiers constrain a mapping. A value that is not one has no
+    keys to count, which is a different answer from a count of zero: vtjson
+    rejects it whatever the modifier's threshold is, so the two must not share
+    an encoding.
+    """
+    if not isinstance(obj, Mapping):
+        return None
+    return sum(1 for k in candidates if k in obj)
+
+
+def _counted(
+    candidates: tuple[object, ...], obj: object, accept: Callable[[int], bool]
+) -> bool:
+    """Whether ``obj`` is a mapping whose count of ``candidates`` ``accept``s."""
+    present = _present(candidates, obj)
+    return present is not None and accept(present)
 
 
 def keys(*required: object) -> CompiledValidator:
-    """Require every listed key to be present (by ``in``)."""
-    return _predicate(lambda obj: _present(required, obj) == len(required))
+    """Require every listed key to be present."""
+    return _predicate(lambda obj: _counted(required, obj, lambda n: n == len(required)))
 
 
 def one_of(*candidates: object) -> CompiledValidator:
     """Require exactly one of the listed keys to be present."""
-    return _predicate(lambda obj: _present(candidates, obj) == 1)
+    return _predicate(lambda obj: _counted(candidates, obj, lambda n: n == 1))
 
 
 def at_least_one_of(*candidates: object) -> CompiledValidator:
     """Require at least one of the listed keys to be present."""
-    return _predicate(lambda obj: _present(candidates, obj) >= 1)
+    return _predicate(lambda obj: _counted(candidates, obj, lambda n: n >= 1))
 
 
 def at_most_one_of(*candidates: object) -> CompiledValidator:
     """Require at most one of the listed keys to be present."""
-    return _predicate(lambda obj: _present(candidates, obj) <= 1)
+    return _predicate(lambda obj: _counted(candidates, obj, lambda n: n <= 1))
 
 
 @_nullary
