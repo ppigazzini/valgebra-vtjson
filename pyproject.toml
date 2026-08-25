@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "valgebra-vtjson"
-version = "0.0.0"
+version = "0.0.1"
 requires-python = ">=3.10"
 description = "vtjson interoperability layer for valgebra: read vtjson-style schemas and validate them through valgebra, proven by a differential suite."
 readme = "README.md"
@@ -41,9 +41,13 @@ dev = [
     "annotated-types>=0.8",
     "hypothesis>=6.165.10",
     "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+    "tomli>=2.2.1; python_version < '3.11'",
     "ruff>=0.16.4",
     "ty>=0.0.74",
-    "vtjson>=2.3.0",
+    # Pinned, not floored: the differential suite is a claim about one
+    # oracle version, and a floor makes that claim unreproducible.
+    "vtjson==2.3.0",
     "email-validator>=2.3.0",
     "idna>=3.19",
     "dnspython>=2.8.0",

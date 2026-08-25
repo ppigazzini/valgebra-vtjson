@@ -17,6 +17,7 @@ unnoticed and unsupported.
 
 from __future__ import annotations
 
+import typing
 from pathlib import Path
 
 import vtjson
@@ -27,6 +28,7 @@ import vtjson_compat
 # vtjson_compat (asserted below).
 _SUPPORTED = frozenset(
     {
+        "SchemaError",
         "ValidationError",
         "anything",
         "at_least_one_of",
@@ -148,8 +150,7 @@ _INFRASTRUCTURE = frozenset(
         "supports_TypedDict",
         "supports_UnionType",
         "supports_structural",
-        # Internal base classes and the schema-error type.
-        "SchemaError",
+        # Internal base classes.
         "comparable",
         "compiled_schema",
         "wrapper",
@@ -161,11 +162,24 @@ def _public_surface() -> frozenset[str]:
     return frozenset(name for name in dir(vtjson) if not name.startswith("_"))
 
 
+def _absent_from_this_interpreter(name: str) -> bool:
+    """Whether ``name`` is a typing construct this interpreter's stdlib lacks.
+
+    vtjson re-exports typing special forms that arrived after its own floor —
+    ``Required`` and ``NotRequired`` in 3.11, ``TypeAliasType`` in 3.12 — so its
+    public surface is narrower on an older interpreter. A classified name
+    missing for that reason is not a stale entry.
+    """
+    return not hasattr(typing, name)
+
+
 def test_classification_partitions_the_public_surface() -> None:
     classified = _SUPPORTED | _LEDGERED | _INFRASTRUCTURE
     surface = _public_surface()
     unclassified = surface - classified
-    stale = classified - surface
+    stale = {
+        name for name in classified - surface if not _absent_from_this_interpreter(name)
+    }
     assert not unclassified, (
         f"vtjson exposes unclassified names: {sorted(unclassified)}. "
         "Classify each as supported, ledgered, or infrastructure."

@@ -22,16 +22,12 @@ schema = {"name": str, "age?": int}
 vtjson.validate(schema, {"name": "Ada", "age": 36})  # passes
 ```
 
-The compatibility surface mirrors vtjson's names: `validate`, the combinators
-(`union`, `intersect`, `complement`, `ifthen`, `cond`), the dict-key modifiers
-(`keys`, `one_of`, `at_least_one_of`, `at_most_one_of`), the structural checks
-(`fields`, `protocol`), the comparison and size refinements (`gt`, `ge`, `lt`,
-`le`, `interval`, `size`), the predicates (`unique`, `div`, `close_to`,
-`filter`), the string formats (`regex`, `regex_pattern`, `glob`, `url`,
-`ip_address`, `date_time`, `date`, `time`), the network formats (`email`,
-`domain_name`), the wrappers (`lax`, `strict`, `quote`, `set_name`, `set_label`,
-`make_type`, `safe_cast`), and `anything`/`nothing`/`optional_key`/`float_`/
-`number`, plus the two error types `ValidationError` and `SchemaError`.
+The compatibility surface mirrors vtjson's names. Every name on vtjson's
+public surface is classified in `tests/test_parity_inventory.py` as supported,
+ledgered here as an intentional difference, or not a schema construct at all —
+and the three sets must cover that surface exactly, so a vtjson release adding
+a construct fails the suite until someone classifies it. Read that file for the
+roll-call; a second copy in this page could only drift away from it.
 
 A container schema carries the class it is written in: an `OrderedDict` schema
 admits no plain `dict`, and a named tuple schema admits no plain tuple, as in
@@ -93,10 +89,9 @@ The prefix-plus-repeated-tail list `[A, B, ...]`, the matching tuple shapes
 (`(T, ...)` and `(A, B, ...)`), multi-element sets (`{A, B}`, where every member
 matches `A` or `B`), and heterogeneous mappings (several key-schema →
 value-schema clauses, or a named key mixed with a key-schema catch-all, e.g.
-`{str: int, int: str}` or `{"name": str, str: int}`) were once recorded here as
-unsupported. valgebra has since grown a sequence-regex node (now wired through
-the tuple frontend as well) and a keyed-default mapping node, so all of them
-translate with exact parity and are no longer divergences.
+`{str: int, int: str}` or `{"name": str, str: int}`) all translate with exact
+parity: valgebra's sequence-regex node carries the list and tuple shapes, and
+its keyed-default mapping node carries the rest.
 
 ## Conformance against fishtest
 
@@ -109,7 +104,7 @@ the same accept/reject decision. All six schema-keyed tables reach identical
 decisions too: `cache_schema`, `wtt_map_schema`, `connections_counter_schema`,
 `books_schema`, the `unfinished_runs_schema` set, and `worker_runs_schema` —
 whose value is a *mixed* record-plus-catch-all (`{run_id: True, "last_run":
-run_id}`) that valgebra's keyed-default mapping now expresses. fishtest's own
+run_id}`) that valgebra's keyed-default mapping expresses. fishtest's own
 `magic`, `ObjectId`, and `set_label`/`subs` usages map to the optional extras, an
 `isinstance` check, and `recursive` respectively. **Every fishtest schema conforms;
 no schema is unsupported.**

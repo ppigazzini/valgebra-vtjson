@@ -19,7 +19,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
-import tomllib
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:  # pragma: no cover - only on the oldest supported interpreter
+    import tomli as tomllib
 import valgebra
 
 import vtjson_compat as vg

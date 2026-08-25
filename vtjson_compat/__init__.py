@@ -17,21 +17,10 @@ Layout: ``_translate`` is the schema translator, ``_constructs`` the combinators
 and predicates, ``_formats`` the string and network format validators; this
 module is the public surface.
 
-Currently supported: scalars (with the ``float``/``float_`` mapping), ``None``,
-constants, ``anything``/``nothing``, ``union``/``intersect``/``complement``,
-homogeneous ``[T, ...]``, prefix-plus-tail ``[A, B, ...]``, and fixed-length
-``[A, B]`` lists, the same three tuple shapes, single- and multi-element sets,
-records (with the ``"key?"`` optional convention),
-``{KeyType: ValueType}`` mappings, the comparison and size refinements
-(``gt``/``ge``/``lt``/``le``/``interval``/``size``), ``ifthen``/``cond``, the
-dict-key modifiers (``keys``/``one_of``/``at_least_one_of``/``at_most_one_of``),
-``fields``/``protocol`` structural checks, the ``filter``/``unique``/``div``/
-``close_to`` predicates, the string-format validators (``regex``/
-``regex_pattern``/``glob``/``url``/``ip_address``/``date_time``/``date``/
-``time``), the network formats (``email``/``domain_name`` via the
-``valgebra-vtjson[formats]`` extra, ``magic`` via ``valgebra-vtjson[magic]``),
-and the wrappers (``lax``/``strict``/``quote``/``set_name``/``set_label``/
-``make_type``/``safe_cast``).
+The supported surface is the one ``tests/test_parity_inventory.py`` classifies:
+that file holds every vtjson public name to exactly one of supported, ledgered,
+or not-a-construct, so it cannot fall out of step with the package the way a
+list written here would.
 
 A construct checks its own arguments when the schema is built and raises
 ``SchemaError`` when they cannot express a set of values, as vtjson does. The
