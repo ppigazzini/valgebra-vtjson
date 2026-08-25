@@ -5,7 +5,8 @@ so a vtjson schema validates with the same accept/reject decision. The
 translation is honest about valgebra's algebra: where vtjson is lax, the lax
 meaning is expressed with the combinators (for example vtjson's ``float``, which
 also admits ints, becomes ``union(int, float)``) rather than by weakening a
-primitive.
+primitive. A bare float *constant* is read the same way: vtjson matches one by
+tolerance rather than identity, so the layer does too.
 
 This package does not import the real ``vtjson`` package; it reimplements the
 relevant surface on top of valgebra. Intentional behavioral differences are
@@ -68,6 +69,7 @@ from ._constructs import (
     le,
     lt,
     make_type,
+    number,
     one_of,
     protocol,
     quote,
@@ -107,11 +109,6 @@ from ._valgebra_api import (
 # The lattice top and bottom, re-exported under the vtjson names.
 anything = _anything
 nothing = _nothing
-
-# vtjson's `number` is a deprecated alias for its `float` schema, which admits
-# both ints and floats. valgebra keeps `float_` for the floats-only set, so this
-# matches vtjson's lax meaning exactly.
-number = union(int, float)
 
 __all__ = [
     "SchemaError",

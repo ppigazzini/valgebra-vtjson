@@ -141,7 +141,14 @@ def ifthen(
     then: object,
     otherwise: object = anything,
 ) -> CompiledValidator:
-    """Require ``then`` when a value matches ``condition``, else ``otherwise``."""
+    """Require ``then`` when a value matches ``condition``, else ``otherwise``.
+
+    Following vtjson, ``otherwise=None`` means there is no else-branch, so a
+    value outside ``condition`` is admitted. Translating the ``None`` instead
+    would demand the value *be* ``None``, inverting the construct.
+    """
+    if otherwise is None:
+        otherwise = anything
     return _derived_ifthen(
         _translate(condition), _translate(then), _translate(otherwise)
     )
@@ -160,9 +167,21 @@ def cond(
     return _derived_cond(*translated, default=_translate(default))
 
 
+@_nullary
 def float_() -> CompiledValidator:
     """Return the floats-only set (vtjson's ``float_``)."""
     return _validator(float)
+
+
+@_nullary
+def number() -> CompiledValidator:
+    """Return the ints and the floats (vtjson's ``number``).
+
+    vtjson's `number` is a deprecated alias for its `float` schema, which admits
+    both, so the union matches its meaning exactly. valgebra keeps `float_` for
+    the floats-only set.
+    """
+    return _union(_validator(int), _validator(float))
 
 
 def _present(candidates: tuple[object, ...], obj: object) -> int | None:
@@ -234,7 +253,10 @@ def div(divisor: int, remainder: int = 0, name: str | None = None) -> CompiledVa
         raise SchemaError(msg)
 
     def check(obj: object) -> bool:
-        return isinstance(obj, int) and obj % divisor == remainder
+        # `(obj - remainder) % divisor`, not `obj % divisor == remainder`: the
+        # two agree only where `remainder` is already the canonical residue,
+        # and vtjson accepts any integer pair with a nonzero divisor.
+        return isinstance(obj, int) and (obj - remainder) % divisor == 0
 
     return _predicate(check)
 

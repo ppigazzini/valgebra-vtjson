@@ -7,6 +7,7 @@ meaning is expressed with the algebra so the accept/reject decision matches.
 """
 
 import importlib
+import math
 from collections.abc import Callable
 from typing import Annotated
 
@@ -143,8 +144,29 @@ _SCALAR = {
 }
 
 
-def _translate(schema: object) -> CompiledValidator:  # noqa: PLR0911
-    """Translate a vtjson-style schema spec into a valgebra validator."""
+def _near(value: float) -> CompiledValidator:
+    """Build the set a bare float constant denotes: the floats close to ``value``.
+
+    vtjson reads a float schema as a tolerance rather than an identity, so
+    ``1.5`` admits any float within ``math.isclose``'s default relative
+    tolerance of it. The type test is what keeps the layer's documented reading
+    of a constant as a *typed* singleton: an ``int`` equal to the bound is a
+    separate, ledgered divergence and is not widened here.
+    """
+
+    def check(obj: object) -> bool:
+        return type(obj) is float and math.isclose(obj, value)
+
+    return _predicate(check)
+
+
+def _translate(schema: object, *, exact: bool = False) -> CompiledValidator:  # noqa: PLR0911
+    """Translate a vtjson-style schema spec into a valgebra validator.
+
+    With ``exact``, a float constant is matched by equality rather than by
+    tolerance. Dict keys are looked up, not compared, so vtjson matches a float
+    key exactly even though it matches a float *value* approximately.
+    """
     if isinstance(schema, CompiledValidator):
         return schema
     if schema is None:
@@ -159,12 +181,19 @@ def _translate(schema: object) -> CompiledValidator:  # noqa: PLR0911
         return _translate_tuple(schema)
     if isinstance(schema, set):
         return _translate_set(schema)
+    return _translate_leaf(schema, exact=exact)
+
+
+def _translate_leaf(schema: object, *, exact: bool) -> CompiledValidator:
+    """Translate a schema that is not a container: a predicate or a constant."""
     if callable(schema):
         if getattr(schema, "_vtjson_nullary", False):
             # A bare nullary construct, like vtjson's auto-instantiated bare class.
             return _translate(schema())  # ty: ignore[call-top-callable]
         # A bare callable is a predicate over any value (the vtjson convention).
         return _validator(Annotated[object, schema])
+    if isinstance(schema, float) and not exact:
+        return _near(schema)
     # Anything else is an exact-value constant matched by equality.
     return _validator(schema)
 
@@ -226,7 +255,9 @@ def _translate_dict(schema: dict) -> CompiledValidator:
     # — so records, single mappings, multi-clause maps, and a record mixed with a
     # catch-all all translate uniformly.
     translated = {
-        (key if isinstance(key, str) else _translate(key)): _translate(value)
+        (key if isinstance(key, str) else _translate(key, exact=True)): _translate(
+            value
+        )
         for key, value in schema.items()
     }
     return _validator(translated)
