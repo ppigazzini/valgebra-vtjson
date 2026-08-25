@@ -51,69 +51,69 @@ from ._valgebra_api import (
 )
 
 
-def gt(bound: object) -> CompiledValidator:
-    """Values strictly greater than ``bound``."""
-    return _refine(_Marker(gt=_bound(bound, "lower")))
+def gt(lb: object) -> CompiledValidator:
+    """Values strictly greater than ``lb``."""
+    return _refine(_Marker(gt=_bound(lb, "lower")))
 
 
-def ge(bound: object) -> CompiledValidator:
-    """Values greater than or equal to ``bound``."""
-    return _refine(_Marker(ge=_bound(bound, "lower")))
+def ge(lb: object) -> CompiledValidator:
+    """Values greater than or equal to ``lb``."""
+    return _refine(_Marker(ge=_bound(lb, "lower")))
 
 
-def lt(bound: object) -> CompiledValidator:
-    """Values strictly less than ``bound``."""
-    return _refine(_Marker(lt=_bound(bound, "upper")))
+def lt(ub: object) -> CompiledValidator:
+    """Values strictly less than ``ub``."""
+    return _refine(_Marker(lt=_bound(ub, "upper")))
 
 
-def le(bound: object) -> CompiledValidator:
-    """Values less than or equal to ``bound``."""
-    return _refine(_Marker(le=_bound(bound, "upper")))
+def le(ub: object) -> CompiledValidator:
+    """Values less than or equal to ``ub``."""
+    return _refine(_Marker(le=_bound(ub, "upper")))
 
 
 def interval(
-    lower: object,
-    upper: object,
-    strict_lower: bool = False,  # noqa: FBT001, FBT002
-    strict_upper: bool = False,  # noqa: FBT001, FBT002
+    lb: object,
+    ub: object,
+    strict_lb: bool = False,  # noqa: FBT001, FBT002
+    strict_ub: bool = False,  # noqa: FBT001, FBT002
 ) -> CompiledValidator:
-    """Values in the interval between ``lower`` and ``upper``.
+    """Values in the interval between ``lb`` and ``ub``.
 
     Following vtjson, ``...`` on either end means that end is unbounded, so the
     bound is omitted rather than compared against the sentinel.
     """
     bounds: dict[str, object] = {}
-    if lower is not Ellipsis:
-        bounds["gt" if strict_lower else "ge"] = _bound(lower, "lower")
-    if upper is not Ellipsis:
-        bounds["lt" if strict_upper else "le"] = _bound(upper, "upper")
-    if lower is not Ellipsis and upper is not Ellipsis:
+    if lb is not Ellipsis:
+        bounds["gt" if strict_lb else "ge"] = _bound(lb, "lower")
+    if ub is not Ellipsis:
+        bounds["lt" if strict_ub else "le"] = _bound(ub, "upper")
+    if lb is not Ellipsis and ub is not Ellipsis:
         # Two ends each orderable against themselves can still be unorderable
         # against each other, and an interval whose ends cannot be compared
         # denotes no set of values.
         try:
-            _ = lower <= upper  # ty: ignore[unsupported-operator]
+            _ = lb <= ub  # ty: ignore[unsupported-operator]
         except TypeError as exc:
-            msg = f"the bounds {lower!r} and {upper!r} do not support comparison"
+            msg = f"the bounds {lb!r} and {ub!r} do not support comparison"
             raise SchemaError(msg) from exc
     return _refine(_Marker(**bounds))
 
 
-def size(lower: int, upper: int | EllipsisType | None = None) -> CompiledValidator:
-    """Values whose ``len`` is bounded by ``lower`` and ``upper``.
+def size(lb: int, ub: int | EllipsisType | None = None) -> CompiledValidator:
+    """Values whose ``len`` is bounded by ``lb`` and ``ub``.
 
-    Following vtjson: a missing ``upper`` means exactly ``lower``, and ``upper``
-    of ``...`` means unbounded above.
+    Following vtjson: a missing ``ub`` means exactly ``lb``, and ``ub`` of
+    ``...`` means unbounded above.
     """
-    low = _integer(lower, "lower size bound")
+    low = _integer(lb, "lower size bound")
     if low < 0:
         msg = f"the lower size bound {low} is smaller than 0"
         raise SchemaError(msg)
     bounds: dict[str, object] = {"min_length": low}
-    if upper is None:
+    if ub is None:
         bounds["max_length"] = low
-    elif upper is not Ellipsis:
-        high = _integer(upper, "upper size bound")
+    elif ub is not Ellipsis:
+        high = _integer(ub, "upper size bound")
         if high < low:
             msg = f"the lower size bound {low} is bigger than the upper bound {high}"
             raise SchemaError(msg)
@@ -137,34 +137,35 @@ def complement(schema: object) -> CompiledValidator:
 
 
 def ifthen(
-    condition: object,
-    then: object,
-    otherwise: object = anything,
+    if_schema: object,
+    then_schema: object,
+    else_schema: object = None,
 ) -> CompiledValidator:
-    """Require ``then`` when a value matches ``condition``, else ``otherwise``.
+    """Require ``then_schema`` when a value matches ``if_schema``.
 
-    Following vtjson, ``otherwise=None`` means there is no else-branch, so a
-    value outside ``condition`` is admitted. Translating the ``None`` instead
+    Following vtjson, ``else_schema=None`` means there is no else-branch, so a
+    value outside ``if_schema`` is admitted. Translating the ``None`` instead
     would demand the value *be* ``None``, inverting the construct.
     """
-    if otherwise is None:
-        otherwise = anything
+    if else_schema is None:
+        else_schema = anything
     return _derived_ifthen(
-        _translate(condition), _translate(then), _translate(otherwise)
+        _translate(if_schema), _translate(then_schema), _translate(else_schema)
     )
 
 
-def cond(
-    *cases: tuple[object, object],
-    default: object = anything,
-) -> CompiledValidator:
-    """Select the ``then`` of the first matching ``(condition, then)`` case."""
-    for case in cases:
+def cond(*args: tuple[object, object]) -> CompiledValidator:
+    """Select the ``then`` of the first matching ``(condition, then)`` case.
+
+    vtjson has no default clause; a trailing ``(anything, then)`` case is how
+    one is written, and an unmatched value is admitted.
+    """
+    for case in args:
         if not isinstance(case, tuple) or len(case) != 2:  # noqa: PLR2004
             msg = f"the case {case!r} is not a tuple of length two"
             raise SchemaError(msg)
-    translated = [(_translate(c), _translate(t)) for c, t in cases]
-    return _derived_cond(*translated, default=_translate(default))
+    translated = [(_translate(c), _translate(t)) for c, t in args]
+    return _derived_cond(*translated)
 
 
 @_nullary
@@ -296,34 +297,33 @@ def close_to(
 
 
 def filter(  # noqa: A001  (mirrors vtjson's public name)
-    transform: object,
+    filter: object,  # noqa: A002  (mirrors vtjson's parameter name)
     schema: object,
     filter_name: str | None = None,
 ) -> CompiledValidator:
-    """Validate ``schema`` against ``transform(value)`` (a transform-then-check)."""
+    """Validate ``schema`` against ``filter(value)`` (a transform-then-check)."""
     del filter_name  # accepted for vtjson signature parity; unused
-    if not callable(transform):
+    if not callable(filter):
         msg = "the filter is not callable"
         raise SchemaError(msg)
     inner = _translate(schema)
 
     def check(obj: object) -> bool:
         try:
-            return inner.is_valid(transform(obj))  # ty: ignore[call-top-callable]
+            return inner.is_valid(filter(obj))  # ty: ignore[call-top-callable]
         except Exception:  # noqa: BLE001  (any transform error means non-member)
             return False
 
     return _predicate(check)
 
 
-def fields(attributes: dict) -> CompiledValidator:
-    """Require each named attribute to be present and match its schema."""
-    if not isinstance(attributes, Mapping):
-        msg = f"the attributes {attributes!r} are not a Mapping"
+def fields(d: Mapping[str, object]) -> CompiledValidator:
+    """Require each attribute named in ``d`` to be present and match its schema."""
+    if not isinstance(d, Mapping):
+        msg = f"the attributes {d!r} are not a Mapping"
         raise SchemaError(msg)
     inner = {
-        _text(name, "attribute name"): _translate(schema)
-        for name, schema in attributes.items()
+        _text(name, "attribute name"): _translate(schema) for name, schema in d.items()
     }
     return _predicate(lambda obj: _attributes_match(inner, obj))
 
@@ -366,9 +366,9 @@ def _items_match(inner: dict, obj: object) -> bool:
     )
 
 
-def quote(value: object) -> CompiledValidator:
-    """Match the literal ``value`` by equality, not as a schema to interpret."""
-    return _predicate(lambda obj: obj == value)
+def quote(schema: object) -> CompiledValidator:
+    """Match ``schema`` as a literal by equality, not as a schema to interpret."""
+    return _predicate(lambda obj: obj == schema)
 
 
 def set_name(schema: object, name: str, reason: bool = False) -> CompiledValidator:  # noqa: FBT001, FBT002
@@ -395,9 +395,20 @@ def make_type(
     name: str | None = None,
     strict: bool = True,  # noqa: FBT001, FBT002
     debug: bool = False,  # noqa: FBT001, FBT002
+    subs: Mapping[str, object] | None = None,
 ) -> type:
-    """Return an ``isinstance``-able type backed by the schema's validator."""
+    """Return an ``isinstance``-able type backed by the schema's validator.
+
+    A non-empty ``subs`` is refused rather than ignored: silently dropping a
+    substitution would build a type over a schema the caller did not ask for.
+    """
     del debug
+    if subs:
+        msg = (
+            "validate-time subs substitution is not supported; "
+            "express recursion with valgebra's recursive fixpoint"
+        )
+        raise NotImplementedError(msg)
     validator = _translate(schema)
     if not strict:
         validator = _lax(validator)

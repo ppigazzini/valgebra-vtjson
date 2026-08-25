@@ -43,10 +43,12 @@ compile-once path); ``validate`` recompiles per call, like vtjson's ``validate``
 Validate-time ``subs`` substitution is not supported: use the ``recursive`` fixpoint
 for recursion instead.
 
-Some names mirror vtjson's and shadow Python builtins (``compile``, ``filter``,
-the ``dict=`` parameter of ``protocol``, the ``format=`` parameter of
-``date_time``). That is intentional: the layer is a vtjson drop-in, so it keeps
-vtjson's spelling for mechanical migration.
+Some names mirror vtjson's and shadow Python builtins (``compile``, ``filter``
+and its ``filter=`` parameter, the ``dict=`` parameter of ``protocol``, the
+``format=`` parameter of ``date_time``, the ``regex=`` parameter of ``regex``).
+That is intentional: the layer is a vtjson drop-in, so it keeps vtjson's
+spelling — argument names included — for mechanical migration. A call written
+by keyword against vtjson's documentation runs here unchanged.
 """
 
 from ._constructs import (
@@ -162,9 +164,13 @@ __all__ = [
 ]
 
 
-def optional_key(key: str) -> str:
-    """Mark a record key optional, using valgebra's ``"key?"`` convention."""
-    return f"{key}?"
+def optional_key(key: str, _optional: bool = True) -> str:  # noqa: FBT001, FBT002
+    """Mark a record key optional, using valgebra's ``"key?"`` convention.
+
+    Following vtjson, ``_optional=False`` declares the key required, so a
+    record's keys can be marked from a flag the caller computes.
+    """
+    return f"{key}?" if _optional else key
 
 
 def compile(schema: object) -> CompiledValidator:  # noqa: A001  (vtjson's name)

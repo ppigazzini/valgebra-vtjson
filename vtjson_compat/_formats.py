@@ -19,7 +19,7 @@ from ._valgebra_api import CompiledValidator
 
 
 def regex(
-    pattern: str,
+    regex: str,
     name: str | None = None,
     fullmatch: bool = True,  # noqa: FBT001, FBT002
     flags: int = 0,
@@ -29,9 +29,9 @@ def regex(
         _text(name, "regex name")
     del name  # accepted for vtjson signature parity; unused
     try:
-        compiled = re.compile(pattern, flags)
+        compiled = re.compile(regex, flags)
     except (re.error, TypeError, ValueError) as exc:
-        msg = f"{pattern!r} is an invalid regular expression: {exc}"
+        msg = f"{regex!r} is an invalid regular expression: {exc}"
         raise SchemaError(msg) from exc
     match = compiled.fullmatch if fullmatch else compiled.match
     return _predicate(lambda obj: isinstance(obj, str) and match(obj) is not None)
