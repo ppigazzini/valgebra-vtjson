@@ -194,7 +194,10 @@ def _present(candidates: tuple[object, ...], obj: object) -> int | None:
     """
     if not isinstance(obj, Mapping):
         return None
-    return sum(1 for k in candidates if k in obj)
+    try:
+        return sum(1 for k in candidates if k in obj)
+    except Exception:  # noqa: BLE001  (a mapping that cannot answer has no such key)
+        return None
 
 
 def _counted(
@@ -238,8 +241,9 @@ def _all_distinct(obj: object) -> bool:
         return False
     try:
         return len(items) == len({*items})
-    except TypeError:
-        # Unhashable elements: fall back to a quadratic comparison.
+    except Exception:  # noqa: BLE001  (hashing is an optimisation, not the answer)
+        # An element that cannot be hashed — for any reason, not only the
+        # `TypeError` an unhashable type raises — is compared instead.
         return all(a != b for i, a in enumerate(items) for b in items[i + 1 :])
 
 
@@ -253,10 +257,16 @@ def div(divisor: int, remainder: int = 0, name: str | None = None) -> CompiledVa
         raise SchemaError(msg)
 
     def check(obj: object) -> bool:
-        # `(obj - remainder) % divisor`, not `obj % divisor == remainder`: the
-        # two agree only where `remainder` is already the canonical residue,
-        # and vtjson accepts any integer pair with a nonzero divisor.
-        return isinstance(obj, int) and (obj - remainder) % divisor == 0
+        if not isinstance(obj, int):
+            return False
+        try:
+            # `(obj - remainder) % divisor`, not `obj % divisor == remainder`:
+            # the two agree only where `remainder` is already the canonical
+            # residue, and vtjson accepts any integer pair with a nonzero
+            # divisor.
+            return (obj - remainder) % divisor == 0
+        except Exception:  # noqa: BLE001  (arithmetic that raises is not a residue)
+            return False
 
     return _predicate(check)
 
@@ -277,7 +287,9 @@ def close_to(
     def check(obj: object) -> bool:
         try:
             return math.isclose(obj, x, **tolerances)  # ty: ignore[invalid-argument-type]
-        except TypeError:
+        except (TypeError, ValueError):
+            # A non-number, and a tolerance `math.isclose` refuses: neither
+            # makes the value close to `x`.
             return False
 
     return _predicate(check)
@@ -320,7 +332,7 @@ def _attributes_match(inner: dict, obj: object) -> bool:
     for name, validator in inner.items():
         try:
             value = getattr(obj, name)
-        except AttributeError:
+        except Exception:  # noqa: BLE001  (an attribute that cannot be read is absent)
             return False
         if not validator.is_valid(value):
             return False

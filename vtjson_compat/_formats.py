@@ -84,7 +84,12 @@ def url() -> CompiledValidator:
     def check(obj: object) -> bool:
         if not isinstance(obj, str):
             return False
-        result = urlparse(obj)
+        try:
+            result = urlparse(obj)
+        except ValueError:
+            # A netloc `urlparse` refuses — an unterminated IPv6 bracket, or a
+            # host that fails NFKC normalization — is not a URL.
+            return False
         return bool(result.scheme and result.netloc)
 
     return _predicate(check)
