@@ -39,7 +39,7 @@ so the refinement would widen to every value rather than narrowing.
 
 ``compile`` builds a schema once into a reusable validator (vtjson's
 compile-once path); ``validate`` recompiles per call, like vtjson's ``validate``.
-Validate-time ``subs`` substitution is not supported: use the ``lazy`` fixpoint
+Validate-time ``subs`` substitution is not supported: use the ``recursive`` fixpoint
 for recursion instead.
 
 Some names mirror vtjson's and shadow Python builtins (``compile``, ``filter``,
@@ -191,11 +191,14 @@ def validate(
     Raises valgebra's ``ValidationError`` on failure. ``name`` is accepted for
     vtjson signature parity and is cosmetic. ``strict=False`` opens every record
     (the lax mode). Validate-time ``subs`` substitution is not supported — use
-    the ``lazy`` fixpoint for recursion.
+    the ``recursive`` fixpoint for recursion.
     """
     del name  # accepted for vtjson signature parity; cosmetic
     if subs:
-        msg = "validate-time subs substitution is not supported; use lazy for recursion"
+        msg = (
+            "validate-time subs substitution is not supported; "
+            "express recursion with valgebra's recursive fixpoint"
+        )
         raise NotImplementedError(msg)
     validator = _translate(schema)
     if not strict:

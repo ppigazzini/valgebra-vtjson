@@ -348,7 +348,7 @@ def set_label(schema: object, *labels: str, debug: bool = False) -> CompiledVali
     """Accept vtjson's ``set_label``; the labels are ignored.
 
     Labels matter only with validate-time ``subs`` substitution, which is not
-    supported — use the ``lazy`` fixpoint for recursion instead.
+    supported — use the ``recursive`` fixpoint for recursion instead.
     """
     for label in labels:
         _text(label, "label")

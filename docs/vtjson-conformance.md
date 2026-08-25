@@ -8,7 +8,7 @@ vtjson schema at valgebra is mostly an import change, plus the differences below
 
 > This layer is a supported, tested way to run vtjson schemas on valgebra, for as
 > long as you need it. For *new* schemas, valgebra's native API — typing
-> annotations, the `union`/`intersect`/`complement` algebra, and the `lazy`
+> annotations, the `union`/`intersect`/`complement` algebra, and the `recursive`
 > fixpoint — is usually the more direct expression.
 
 ## The import change
@@ -62,9 +62,9 @@ valgebra follows the typing spec's model of literals and so decides differently.
 | Error type | raises `vtjson.ValidationError` | raises `valgebra` `ValidationError` (a different class, with structured `code`/`path`/`expected`/`value`) | Catch `vtjson_compat.ValidationError`. `is_valid`-style checks never raise. |
 | Error report | one first-failure string | one structured violation | Read `err.code`/`err.path` instead of parsing a message. |
 | `float` | also admits `int` | mapped to `union(int, float)`, so the decision matches | None — parity holds. valgebra's own `float` is floats-only, equal to vtjson's `float_`. |
-| Recursion | `set_label` + validate-time `subs` | not supported; `set_name`/`set_label` are accepted but their labels are ignored | Express recursion with valgebra's `lazy` fixpoint. |
-| `magic` | always available (libmagic installed) | needs the `vtjson-magic` extra | Install the extra, or replace with a predicate. |
-| `email`, `domain_name` | always available | need the `vtjson-formats` extra | Install the extra. |
+| Recursion | `set_label` + validate-time `subs` | not supported; `set_name`/`set_label` are accepted but their labels are ignored | Express recursion with valgebra's `recursive` fixpoint. |
+| `magic` | always available (libmagic installed) | needs the `valgebra-vtjson[magic]` extra | Install the extra, or replace with a predicate. |
+| `email`, `domain_name` | always available | need the `valgebra-vtjson[formats]` extra | Install the extra. |
 | Raising predicate | swallowed into a generic failure | surfaced as a distinct `predicate_error` | A crashing predicate now surfaces as `predicate_error` instead of being swallowed, so you can see and address it. |
 | `Apply` / `skip_first` | reorder how `Annotated` arguments apply | not supported (the layer applies `Annotated` metadata in declaration order) | Reorder the `Annotated` arguments instead; valgebra has no apply-order modifier. |
 
@@ -90,7 +90,7 @@ decisions too: `cache_schema`, `wtt_map_schema`, `connections_counter_schema`,
 whose value is a *mixed* record-plus-catch-all (`{run_id: True, "last_run":
 run_id}`) that valgebra's keyed-default mapping now expresses. fishtest's own
 `magic`, `ObjectId`, and `set_label`/`subs` usages map to the optional extras, an
-`isinstance` check, and `lazy` respectively. **Every fishtest schema conforms;
+`isinstance` check, and `recursive` respectively. **Every fishtest schema conforms;
 no schema is unsupported.**
 
 ## A worked example

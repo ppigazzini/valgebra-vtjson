@@ -169,7 +169,7 @@ def time() -> CompiledValidator:
 @_nullary
 def email(**kw: object) -> CompiledValidator:
     """Match valid email addresses (via ``email_validator``, like vtjson)."""
-    email_validator = _require("email_validator")
+    email_validator = _require("email_validator", "formats")
     kw.setdefault("check_deliverability", False)
 
     def check(obj: object) -> bool:
@@ -194,8 +194,8 @@ def domain_name(
     With ``ascii_only=False`` IDNA names are allowed; ``resolve=True`` also
     checks that the name resolves (needs ``dnspython``).
     """
-    idna = _require("idna")
-    resolver = _require("dns.resolver") if resolve else None
+    idna = _require("idna", "formats")
+    resolver = _require("dns.resolver", "formats") if resolve else None
     ascii_re = re.compile(r"[\x00-\x7F]*")
 
     def check(obj: object) -> bool:
@@ -226,7 +226,7 @@ def magic(mime_type: str, name: str | None = None) -> CompiledValidator:
     _text(mime_type, "mime type")
     if name is not None:
         _text(name, "magic name")
-    detector = _require("magic")
+    detector = _require("magic", "magic")
     del name
 
     def check(obj: object) -> bool:

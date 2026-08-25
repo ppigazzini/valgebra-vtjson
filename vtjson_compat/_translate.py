@@ -115,14 +115,19 @@ def _nullary(
     return func
 
 
-def _require(module: str) -> object:
-    """Import an optional dependency, with a clear hint when it is missing."""
+def _require(module: str, extra: str) -> object:
+    """Import an optional dependency, naming the extra that installs it.
+
+    The extra is the caller's to state: the constructs are split across more
+    than one, so a single hard-coded name sends half of them somewhere that
+    does not provide what they need.
+    """
     try:
         return importlib.import_module(module)
     except ImportError as exc:
         msg = (
             f"the '{module}' package is required for this vtjson construct; "
-            "install it with: pip install valgebra-vtjson[formats]"
+            f"install it with: pip install valgebra-vtjson[{extra}]"
         )
         raise ImportError(msg) from exc
 
