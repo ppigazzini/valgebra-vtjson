@@ -14,7 +14,7 @@ import pathlib
 import re
 from urllib.parse import urlparse
 
-from ._translate import _nullary, _predicate, _require
+from ._translate import SchemaError, _nullary, _predicate, _require, _text
 from ._valgebra_api import CompiledValidator
 
 
@@ -25,8 +25,14 @@ def regex(
     flags: int = 0,
 ) -> CompiledValidator:
     """Match strings against a regular expression (full match by default)."""
+    if name is not None:
+        _text(name, "regex name")
     del name  # accepted for vtjson signature parity; unused
-    compiled = re.compile(pattern, flags)
+    try:
+        compiled = re.compile(pattern, flags)
+    except (re.error, TypeError, ValueError) as exc:
+        msg = f"{pattern!r} is an invalid regular expression: {exc}"
+        raise SchemaError(msg) from exc
     match = compiled.fullmatch if fullmatch else compiled.match
     return _predicate(lambda obj: isinstance(obj, str) and match(obj) is not None)
 
@@ -49,7 +55,16 @@ def regex_pattern() -> CompiledValidator:
 
 def glob(pattern: str, name: str | None = None) -> CompiledValidator:
     """Match strings against a Unix filename pattern (``PurePath.match``)."""
+    if name is not None:
+        _text(name, "glob name")
     del name  # accepted for vtjson signature parity; unused
+    # Probe the pattern once, so a pattern no path can be matched against is a
+    # malformed schema rather than a validator that rejects every value.
+    try:
+        pathlib.PurePath("a").match(pattern)
+    except (ValueError, TypeError) as exc:
+        msg = f"{pattern!r} is not a valid filename pattern: {exc}"
+        raise SchemaError(msg) from exc
 
     def check(obj: object) -> bool:
         if not isinstance(obj, str):
@@ -86,7 +101,7 @@ def ip_address(version: int | None = None) -> CompiledValidator:
         method = ipaddress.ip_address
     else:
         msg = "version is not 4 or 6"
-        raise ValueError(msg)
+        raise SchemaError(msg)
 
     def check(obj: object) -> bool:
         if not isinstance(obj, int | str | bytes):
@@ -208,6 +223,9 @@ def magic(mime_type: str, name: str | None = None) -> CompiledValidator:
     Needs the optional ``python-magic`` package (and the system libmagic
     library); install it with ``pip install valgebra-vtjson[magic]``.
     """
+    _text(mime_type, "mime type")
+    if name is not None:
+        _text(name, "magic name")
     detector = _require("magic")
     del name
 

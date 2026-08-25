@@ -145,10 +145,12 @@ def test_string_formats_reject_non_strings(validator: vg.CompiledValidator) -> N
     assert validator.is_valid(None) is False
 
 
-def test_glob_with_an_empty_pattern_rejects_rather_than_raising() -> None:
-    # An empty glob pattern makes PurePath.match raise; the layer turns that into
-    # a clean reject, not a crash.
-    assert vg.glob("").is_valid("anything") is False
+def test_glob_with_an_empty_pattern_is_a_malformed_schema() -> None:
+    # No path can be matched against an empty pattern, so the schema denotes no
+    # set of values. Building it must fail, rather than yielding a validator that
+    # rejects every value with nothing to say about why.
+    with pytest.raises(vg.SchemaError, match="not a valid filename pattern"):
+        vg.glob("")
 
 
 def test_ip_address_rejects_a_non_address_type() -> None:
@@ -158,7 +160,7 @@ def test_ip_address_rejects_a_non_address_type() -> None:
 
 
 def test_ip_address_rejects_an_unknown_version() -> None:
-    with pytest.raises(ValueError, match="version is not 4 or 6"):
+    with pytest.raises(vg.SchemaError, match="version is not 4 or 6"):
         vg.ip_address(5)
 
 

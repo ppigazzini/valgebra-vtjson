@@ -31,7 +31,7 @@ The compatibility surface mirrors vtjson's names: `validate`, the combinators
 `ip_address`, `date_time`, `date`, `time`), the network formats (`email`,
 `domain_name`), the wrappers (`lax`, `strict`, `quote`, `set_name`, `set_label`,
 `make_type`, `safe_cast`), and `anything`/`nothing`/`optional_key`/`float_`/
-`number`.
+`number`, plus the two error types `ValidationError` and `SchemaError`.
 
 ## Optional extras
 
@@ -58,6 +58,7 @@ valgebra follows the typing spec's model of literals and so decides differently.
 | Area | vtjson | valgebra compat | Migration note |
 | --- | --- | --- | --- |
 | **Literal / constant equality (decision)** | a constant matches by Python `==`, so `1` also accepts `True` and `1.0` (and `0` accepts `False`) | a constant is a *typed singleton*: a value must have the same type and be equal, so `1` rejects `True`/`1.0` | valgebra follows the typing spec, which treats `Literal[1]`, `Literal[True]`, and `Literal[1.0]` as distinct singletons. If you relied on the cross-type match, widen the schema explicitly (e.g. `union(1, True)`). |
+| Malformed schema | raises `vtjson.SchemaError` when a construct's arguments cannot express a set of values | raises `vtjson_compat.SchemaError`, a different class with the same role | Catch `vtjson_compat.SchemaError`. Both refuse the schema at construction, so a bound nothing can be ordered against, or a pattern nothing can match, never becomes a validator with a constant verdict. |
 | Error type | raises `vtjson.ValidationError` | raises `valgebra` `ValidationError` (a different class, with structured `code`/`path`/`expected`/`value`) | Catch `vtjson_compat.ValidationError`. `is_valid`-style checks never raise. |
 | Error report | one first-failure string | one structured violation | Read `err.code`/`err.path` instead of parsing a message. |
 | `float` | also admits `int` | mapped to `union(int, float)`, so the decision matches | None — parity holds. valgebra's own `float` is floats-only, equal to vtjson's `float_`. |

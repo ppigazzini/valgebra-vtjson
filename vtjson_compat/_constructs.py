@@ -12,7 +12,19 @@ from collections.abc import Callable, Mapping
 from types import EllipsisType
 from typing import get_type_hints
 
-from ._translate import _DICT, _Marker, _nullary, _predicate, _refine, _translate
+from ._translate import (
+    _DICT,
+    SchemaError,
+    _bound,
+    _integer,
+    _Marker,
+    _nullary,
+    _number,
+    _predicate,
+    _refine,
+    _text,
+    _translate,
+)
 from ._valgebra_api import (
     CompiledValidator,
     anything,
@@ -41,22 +53,22 @@ from ._valgebra_api import (
 
 def gt(bound: object) -> CompiledValidator:
     """Values strictly greater than ``bound``."""
-    return _refine(_Marker(gt=bound))
+    return _refine(_Marker(gt=_bound(bound, "lower")))
 
 
 def ge(bound: object) -> CompiledValidator:
     """Values greater than or equal to ``bound``."""
-    return _refine(_Marker(ge=bound))
+    return _refine(_Marker(ge=_bound(bound, "lower")))
 
 
 def lt(bound: object) -> CompiledValidator:
     """Values strictly less than ``bound``."""
-    return _refine(_Marker(lt=bound))
+    return _refine(_Marker(lt=_bound(bound, "upper")))
 
 
 def le(bound: object) -> CompiledValidator:
     """Values less than or equal to ``bound``."""
-    return _refine(_Marker(le=bound))
+    return _refine(_Marker(le=_bound(bound, "upper")))
 
 
 def interval(
@@ -72,9 +84,18 @@ def interval(
     """
     bounds: dict[str, object] = {}
     if lower is not Ellipsis:
-        bounds["gt" if strict_lower else "ge"] = lower
+        bounds["gt" if strict_lower else "ge"] = _bound(lower, "lower")
     if upper is not Ellipsis:
-        bounds["lt" if strict_upper else "le"] = upper
+        bounds["lt" if strict_upper else "le"] = _bound(upper, "upper")
+    if lower is not Ellipsis and upper is not Ellipsis:
+        # Two ends each orderable against themselves can still be unorderable
+        # against each other, and an interval whose ends cannot be compared
+        # denotes no set of values.
+        try:
+            _ = lower <= upper  # ty: ignore[unsupported-operator]
+        except TypeError as exc:
+            msg = f"the bounds {lower!r} and {upper!r} do not support comparison"
+            raise SchemaError(msg) from exc
     return _refine(_Marker(**bounds))
 
 
@@ -84,11 +105,19 @@ def size(lower: int, upper: int | EllipsisType | None = None) -> CompiledValidat
     Following vtjson: a missing ``upper`` means exactly ``lower``, and ``upper``
     of ``...`` means unbounded above.
     """
-    bounds: dict[str, object] = {"min_length": lower}
+    low = _integer(lower, "lower size bound")
+    if low < 0:
+        msg = f"the lower size bound {low} is smaller than 0"
+        raise SchemaError(msg)
+    bounds: dict[str, object] = {"min_length": low}
     if upper is None:
-        bounds["max_length"] = lower
+        bounds["max_length"] = low
     elif upper is not Ellipsis:
-        bounds["max_length"] = upper
+        high = _integer(upper, "upper size bound")
+        if high < low:
+            msg = f"the lower size bound {low} is bigger than the upper bound {high}"
+            raise SchemaError(msg)
+        bounds["max_length"] = high
     return _refine(_Marker(**bounds))
 
 
@@ -123,6 +152,10 @@ def cond(
     default: object = anything,
 ) -> CompiledValidator:
     """Select the ``then`` of the first matching ``(condition, then)`` case."""
+    for case in cases:
+        if not isinstance(case, tuple) or len(case) != 2:  # noqa: PLR2004
+            msg = f"the case {case!r} is not a tuple of length two"
+            raise SchemaError(msg)
     translated = [(_translate(c), _translate(t)) for c, t in cases]
     return _derived_cond(*translated, default=_translate(default))
 
@@ -194,6 +227,11 @@ def _all_distinct(obj: object) -> bool:
 def div(divisor: int, remainder: int = 0, name: str | None = None) -> CompiledValidator:
     """Require an ``int`` with ``value % divisor == remainder`` (floats reject)."""
     del name  # accepted for vtjson signature parity; unused
+    _integer(divisor, "divisor")
+    _integer(remainder, "remainder")
+    if divisor == 0:
+        msg = "the divisor cannot be zero"
+        raise SchemaError(msg)
 
     def check(obj: object) -> bool:
         return isinstance(obj, int) and obj % divisor == remainder
@@ -207,6 +245,7 @@ def close_to(
     abs_tol: float | None = None,
 ) -> CompiledValidator:
     """Require ``value`` to be close to ``x`` (``math.isclose`` semantics)."""
+    _number(x, "value")
     tolerances: dict[str, float] = {}
     if rel_tol is not None:
         tolerances["rel_tol"] = rel_tol
@@ -229,11 +268,14 @@ def filter(  # noqa: A001  (mirrors vtjson's public name)
 ) -> CompiledValidator:
     """Validate ``schema`` against ``transform(value)`` (a transform-then-check)."""
     del filter_name  # accepted for vtjson signature parity; unused
+    if not callable(transform):
+        msg = "the filter is not callable"
+        raise SchemaError(msg)
     inner = _translate(schema)
 
     def check(obj: object) -> bool:
         try:
-            return inner.is_valid(transform(obj))  # ty: ignore[call-non-callable]
+            return inner.is_valid(transform(obj))  # ty: ignore[call-top-callable]
         except Exception:  # noqa: BLE001  (any transform error means non-member)
             return False
 
@@ -242,7 +284,13 @@ def filter(  # noqa: A001  (mirrors vtjson's public name)
 
 def fields(attributes: dict) -> CompiledValidator:
     """Require each named attribute to be present and match its schema."""
-    inner = {name: _translate(schema) for name, schema in attributes.items()}
+    if not isinstance(attributes, Mapping):
+        msg = f"the attributes {attributes!r} are not a Mapping"
+        raise SchemaError(msg)
+    inner = {
+        _text(name, "attribute name"): _translate(schema)
+        for name, schema in attributes.items()
+    }
     return _predicate(lambda obj: _attributes_match(inner, obj))
 
 
@@ -264,7 +312,11 @@ def protocol(schema: object, dict: bool = False) -> CompiledValidator:  # noqa: 
     ``dict=True`` they are checked against a mapping's items. No ``isinstance``
     check is performed, mirroring vtjson.
     """
-    inner = {name: _translate(hint) for name, hint in get_type_hints(schema).items()}
+    hints = get_type_hints(schema)
+    if not hints:
+        msg = f"the schema {schema!r} does not have type hints"
+        raise SchemaError(msg)
+    inner = {name: _translate(hint) for name, hint in hints.items()}
     if dict:
         return _predicate(lambda obj: _items_match(inner, obj))
     return _predicate(lambda obj: _attributes_match(inner, obj))
@@ -287,6 +339,7 @@ def quote(value: object) -> CompiledValidator:
 
 def set_name(schema: object, name: str, reason: bool = False) -> CompiledValidator:  # noqa: FBT001, FBT002
     """Accept vtjson's ``set_name``; the name is cosmetic, so it is ignored."""
+    _text(name, "name")
     del name, reason
     return _translate(schema)
 
@@ -297,6 +350,8 @@ def set_label(schema: object, *labels: str, debug: bool = False) -> CompiledVali
     Labels matter only with validate-time ``subs`` substitution, which is not
     supported — use the ``lazy`` fixpoint for recursion instead.
     """
+    for label in labels:
+        _text(label, "label")
     del labels, debug
     return _translate(schema)
 

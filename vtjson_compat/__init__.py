@@ -32,6 +32,11 @@ dict-key modifiers (``keys``/``one_of``/``at_least_one_of``/``at_most_one_of``),
 and the wrappers (``lax``/``strict``/``quote``/``set_name``/``set_label``/
 ``make_type``/``safe_cast``).
 
+A construct checks its own arguments when the schema is built and raises
+``SchemaError`` when they cannot express a set of values, as vtjson does. The
+check is not cosmetic: a bound valgebra cannot read contributes no constraint,
+so the refinement would widen to every value rather than narrowing.
+
 ``compile`` builds a schema once into a reusable validator (vtjson's
 compile-once path); ``validate`` recompiles per call, like vtjson's ``validate``.
 Validate-time ``subs`` substitution is not supported: use the ``lazy`` fixpoint
@@ -87,7 +92,7 @@ from ._formats import (
     time,
     url,
 )
-from ._translate import _translate
+from ._translate import SchemaError, _translate
 from ._valgebra_api import CompiledValidator, ValidationError
 from ._valgebra_api import (
     anything as _anything,
@@ -109,6 +114,7 @@ nothing = _nothing
 number = union(int, float)
 
 __all__ = [
+    "SchemaError",
     "ValidationError",
     "anything",
     "at_least_one_of",

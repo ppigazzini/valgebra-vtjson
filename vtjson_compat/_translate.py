@@ -25,6 +25,58 @@ from ._valgebra_api import (
 _DICT = dict
 
 
+class SchemaError(Exception):
+    """A schema's own arguments are malformed, so it denotes no set of values.
+
+    Distinct from ``ValidationError``, which reports a value outside a
+    well-formed schema. The separation is what lets a caller tell a bad document
+    from a bad schema: a bound that cannot be compared against, or a pattern that
+    cannot be compiled, would otherwise become a validator with a constant
+    verdict and no explanation.
+    """
+
+
+def _bound(value: object, role: str) -> object:
+    """Return a comparison bound, refusing one nothing can be ordered against.
+
+    A bound valgebra cannot read contributes no constraint, so the refinement
+    widens to every value rather than narrowing. Self-comparison is the probe:
+    it needs no second operand and no assumption about what will be validated.
+    """
+    try:
+        # Whether the operator exists at all is the question being asked, so
+        # the checker cannot be expected to know that it does.
+        _ = value <= value  # noqa: PLR0124  # ty: ignore[unsupported-operator]
+    except TypeError as exc:
+        msg = f"the {role} bound {value!r} does not support comparison"
+        raise SchemaError(msg) from exc
+    return value
+
+
+def _integer(value: object, role: str) -> int:
+    """Return ``value`` as an integer, or refuse the schema."""
+    if not isinstance(value, int):
+        msg = f"the {role} {value!r} is not an integer"
+        raise SchemaError(msg)
+    return value
+
+
+def _text(value: object, role: str) -> str:
+    """Return ``value`` as a string, or refuse the schema."""
+    if not isinstance(value, str):
+        msg = f"the {role} {value!r} is not a string"
+        raise SchemaError(msg)
+    return value
+
+
+def _number(value: object, role: str) -> int | float:
+    """Return ``value`` as a real number, or refuse the schema."""
+    if not isinstance(value, int | float):
+        msg = f"the {role} {value!r} is not a number"
+        raise SchemaError(msg)
+    return value
+
+
 class _Marker:
     """A structural refinement marker.
 
