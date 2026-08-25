@@ -33,6 +33,11 @@ The compatibility surface mirrors vtjson's names: `validate`, the combinators
 `make_type`, `safe_cast`), and `anything`/`nothing`/`optional_key`/`float_`/
 `number`, plus the two error types `ValidationError` and `SchemaError`.
 
+A container schema carries the class it is written in: an `OrderedDict` schema
+admits no plain `dict`, and a named tuple schema admits no plain tuple, as in
+vtjson. A `frozenset` schema is uninhabited for the same reason it is in vtjson
+— the set shape wants a `set` and the class wants a `frozenset`.
+
 The construct signatures are vtjson's, argument names included, so a call
 written by keyword ports unchanged. `cond` takes cases and nothing else: a
 default clause is a trailing `(anything, then)` case, as in vtjson.
@@ -75,6 +80,8 @@ valgebra follows the typing spec's model of literals and so decides differently.
 | `lax` over a catch-all | a key the catch-all claims must still satisfy it; laxness excuses only a key no clause claims | opening a record drops its catch-all clause, so a claimed key with a failing value is admitted | Validate the mixed dict without `lax`, or state the permitted extra keys as another clause. |
 | Fixed-length sequences | `len(obj)` is called, so a `list` subclass with a raising `__len__` crashes the call | the real sequence is read without invoking a Python-level `__len__` override, so such a value is judged on its actual contents | None for ordinary values. A `list` subclass that lies about its length is validated on what it holds. |
 | `make_type`'s `subs` | performs the substitution | accepts the argument and raises `NotImplementedError` when it is non-empty | Express recursion with valgebra's `recursive` fixpoint. Ignoring the argument would build a type over a schema the caller did not ask for. |
+| A `UserDict` written as a schema | dispatched as a mapping, and the value must be a `UserDict` | read as a constant, so no mapping satisfies it | Write the schema as a plain `dict`. valgebra's mapping node requires a real `dict`, so matching would cost a per-key predicate. |
+| Schema nesting depth | unbounded short of Python's own recursion | a schema reaching 128 levels of valgebra nesting is refused when it is built; a one-element list costs about three levels per source level, so `[[[…]]]` reaches its limit at 43 | Flatten the schema, or express the repetition with a homogeneous `[T, ...]`, which costs one level. |
 | `Apply` / `skip_first` | reorder how `Annotated` arguments apply | not supported (the layer applies `Annotated` metadata in declaration order) | Reorder the `Annotated` arguments instead; valgebra has no apply-order modifier. |
 
 A dict key that more than one clause claims — a named field whose own

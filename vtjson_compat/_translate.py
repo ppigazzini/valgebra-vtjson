@@ -9,11 +9,15 @@ meaning is expressed with the algebra so the accept/reject decision matches.
 import importlib
 import math
 from collections.abc import Callable
+from collections.abc import Set as AbstractSet
 from typing import Annotated
 
 from ._valgebra_api import CompiledValidator
 from ._valgebra_api import (
     fixed_sequence as _fixed_sequence,
+)
+from ._valgebra_api import (
+    intersect as _intersect,
 )
 from ._valgebra_api import (
     union as _union,
@@ -179,7 +183,7 @@ def _translate(schema: object, *, exact: bool = False) -> CompiledValidator:  # 
         return _translate_list(schema)
     if isinstance(schema, tuple):
         return _translate_tuple(schema)
-    if isinstance(schema, set):
+    if isinstance(schema, AbstractSet):
         return _translate_set(schema)
     return _translate_leaf(schema, exact=exact)
 
@@ -210,18 +214,39 @@ def _translate_type(schema: type) -> CompiledValidator:
     return _validator(schema)
 
 
-def _translate_list(schema: list) -> CompiledValidator:
+# The plain builtins carry no demand beyond their kind. Any other class a
+# container schema is written in narrows the contract to that class.
+_PLAIN = (dict, list, tuple, set)
+
+
+def _of_own_class(schema: object, structure: CompiledValidator) -> CompiledValidator:
+    """Narrow ``structure`` to the class ``schema`` is written in.
+
+    vtjson reads a container schema for its shape and then requires the value to
+    be an instance of the literal's own type, so an ``OrderedDict`` schema admits
+    no plain ``dict``. A `frozenset` schema is uninhabited under that rule, since
+    the set shape wants a ``set`` and the class wants a ``frozenset``.
+    """
+    kind = type(schema)
+    if kind in _PLAIN:
+        return structure
+    return _intersect(structure, _validator(kind))
+
+
+def _translate_list(schema: list[object]) -> CompiledValidator:
     # vtjson: a trailing `...` repeats the element just before it, so `[T, ...]`
     # is a homogeneous list and `[A, ..., Z, ...]` is a fixed prefix then the last
     # element repeated; `[A, B, C]` is a fixed-length positional list; `[]`
     # matches only the empty list. valgebra's native list form expresses each.
     if schema and schema[-1] is Ellipsis:
         prefix = [_translate(item) for item in schema[:-1]]
-        return _validator([*prefix, ...])
-    return _fixed_sequence(*(_translate(item) for item in schema))
+        return _of_own_class(schema, _validator([*prefix, ...]))
+    return _of_own_class(
+        schema, _fixed_sequence(*(_translate(item) for item in schema))
+    )
 
 
-def _translate_tuple(schema: tuple) -> CompiledValidator:
+def _translate_tuple(schema: tuple[object, ...]) -> CompiledValidator:
     # vtjson reads a trailing `...` as it does for lists: the element before it
     # repeats after a fixed prefix. valgebra's frontend expresses every tuple
     # shape, so `(T, ...)`, the prefix form `(A, B, ...)`, and the fixed-length
@@ -229,26 +254,26 @@ def _translate_tuple(schema: tuple) -> CompiledValidator:
     # not as a static type.
     if schema and schema[-1] is Ellipsis:
         args = (*(_translate(item) for item in schema[:-1]), Ellipsis)
-        return _validator(tuple[args])  # ty: ignore[invalid-type-form]
+        return _of_own_class(schema, _validator(tuple[args]))  # ty: ignore[invalid-type-form]
     # valgebra reads a fixed-length tuple as the subscription `tuple[A, B]`, not a
     # tuple literal, so build the generic alias from the translated elements.
     fixed = tuple(_translate(item) for item in schema)
-    return _validator(tuple[fixed])  # ty: ignore[invalid-type-form]
+    return _of_own_class(schema, _validator(tuple[fixed]))  # ty: ignore[invalid-type-form]
 
 
-def _translate_set(schema: set) -> CompiledValidator:
+def _translate_set(schema: AbstractSet[object]) -> CompiledValidator:
     # vtjson reads a set schema as "every element matches one of these schemas":
     # a single element is homogeneous, several union, and the empty set `set()`
     # matches only the empty set. valgebra expresses each as a set of the union
     # of the element schemas (an empty union is the uninhabited element type, so
     # `set()` becomes the set whose only member is the empty set).
     element = _union(*(_translate(item) for item in schema))
-    return _validator(set[element])  # ty: ignore[invalid-type-form]
+    return _of_own_class(schema, _validator(set[element]))  # ty: ignore[invalid-type-form]
 
 
-def _translate_dict(schema: dict) -> CompiledValidator:
+def _translate_dict(schema: dict[object, object]) -> CompiledValidator:
     if not schema:
-        return _validator({})
+        return _of_own_class(schema, _validator({}))
     # A string key is a record field (a trailing "?" marks it optional); any
     # other key is a schema constraining the rest. valgebra's native dict form
     # combines both — named fields plus one or more key-pattern catch-all clauses
@@ -275,7 +300,7 @@ def _translate_dict(schema: dict) -> CompiledValidator:
             if pattern.is_valid(_field_name(key))
         ]
         translated[key] = _union(field, *alternatives) if alternatives else field
-    return _validator(translated)
+    return _of_own_class(schema, _validator(translated))
 
 
 def _field_name(key: str) -> str:
