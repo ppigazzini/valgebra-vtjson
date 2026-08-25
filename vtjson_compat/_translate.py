@@ -254,10 +254,30 @@ def _translate_dict(schema: dict) -> CompiledValidator:
     # combines both — named fields plus one or more key-pattern catch-all clauses
     # — so records, single mappings, multi-clause maps, and a record mixed with a
     # catch-all all translate uniformly.
-    translated = {
-        (key if isinstance(key, str) else _translate(key, exact=True)): _translate(
-            value
-        )
+    catch_alls = {
+        key: (_translate(key, exact=True), _translate(value))
         for key, value in schema.items()
+        if not isinstance(key, str)
     }
+    translated: dict[object, CompiledValidator] = {}
+    for key, value in schema.items():
+        if not isinstance(key, str):
+            pattern, clause = catch_alls[key]
+            translated[pattern] = clause
+            continue
+        # vtjson admits a key when *any* clause claiming it admits the value, so
+        # a field its own catch-alls also claim has more than one way to pass.
+        # Which catch-alls claim a literal key is settled here, not per value.
+        field = _translate(value)
+        alternatives = [
+            clause
+            for pattern, clause in catch_alls.values()
+            if pattern.is_valid(_field_name(key))
+        ]
+        translated[key] = _union(field, *alternatives) if alternatives else field
     return _validator(translated)
+
+
+def _field_name(key: str) -> str:
+    """Return the field a record key declares, without the optional mark."""
+    return key.removesuffix("?")

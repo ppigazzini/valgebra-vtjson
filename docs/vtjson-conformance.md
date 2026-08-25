@@ -66,7 +66,14 @@ valgebra follows the typing spec's model of literals and so decides differently.
 | `magic` | always available (libmagic installed) | needs the `valgebra-vtjson[magic]` extra | Install the extra, or replace with a predicate. |
 | `email`, `domain_name` | always available | need the `valgebra-vtjson[formats]` extra | Install the extra. |
 | Raising predicate | swallowed into a generic failure | surfaced as a distinct `predicate_error` | A crashing predicate now surfaces as `predicate_error` instead of being swallowed, so you can see and address it. |
+| `lax`/`strict` nesting | the innermost wrapper wins: a `lax` inside a `strict` stays open, because each wrapper imposes its mode on everything below it | the outermost wins: `lax` and `strict` set a flag on the compiled record, so the last one applied decides. `validate(..., strict=False)` likewise opens a record an inner `strict()` closed | Apply the wrapper you mean at the outermost point, and do not rely on an inner wrapper overriding an outer one. |
+| `lax` over a catch-all | a key the catch-all claims must still satisfy it; laxness excuses only a key no clause claims | opening a record drops its catch-all clause, so a claimed key with a failing value is admitted | Validate the mixed dict without `lax`, or state the permitted extra keys as another clause. |
 | `Apply` / `skip_first` | reorder how `Annotated` arguments apply | not supported (the layer applies `Annotated` metadata in declaration order) | Reorder the `Annotated` arguments instead; valgebra has no apply-order modifier. |
+
+A dict key that more than one clause claims — a named field whose own
+catch-all also matches its name — belongs when **any** of those clauses admits
+the value, as in vtjson. Which catch-alls claim a literal key is settled when
+the schema is built, so the check costs nothing per value.
 
 The prefix-plus-repeated-tail list `[A, B, ...]`, the matching tuple shapes
 (`(T, ...)` and `(A, B, ...)`), multi-element sets (`{A, B}`, where every member
