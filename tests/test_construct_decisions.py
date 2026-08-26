@@ -87,6 +87,10 @@ ROWS: list[tuple[str, Callable[[Any], object], list[object]]] = [
     # `Optional` rather than `X | None`: the spelling is what is under test.
     ("Optional[int]", lambda m: Optional[int], [1, None, "a"]),  # noqa: ARG005, UP045
     ("Literal['a','b']", lambda m: Literal["a", "b"], ["a", "b", "c", 1]),  # noqa: ARG005
+    # `Any` is a schema vtjson names outright, and it admits everything. Before
+    # 3.11 it is not a class, so reading it by `isinstance(schema, type)` alone
+    # drops it to the constant branch, where it admits only itself.
+    ("Any", lambda m: Any, [1, "a", None, [], {"a": 1}, object()]),  # noqa: ARG005
     # `close_to` measures numbers vtjson recognises as such. A `Decimal` or a
     # `Fraction` compares fine under `math.isclose` and is not one of them.
     (

@@ -97,6 +97,19 @@ its own right, as vtjson reads it — so a construct written in the metadata
 constrains the value rather than decorating it, including inside a subscripted
 generic such as `dict[str, Annotated[int, ge(0)]]`.
 
+A subscripted generic is read by what its origin is, not by whether that origin
+is a builtin. A `Mapping` subclass gives a mapping over the two arguments and a
+`Container` subclass a collection over the one, and the value must be an
+instance of the origin as well — so `Sequence[int]`, `Mapping[str, int]`,
+`deque[int]` and `OrderedDict[str, int]` all decide as they do in vtjson, and
+the wrong number of arguments is a `SchemaError` rather than a verdict. An
+origin that names neither kind falls back on vtjson's own rule for a schema it
+cannot place, which reads the form as an instance check if it answers to `type`
+and calls it otherwise. `type[int]` is the form where that distinction is
+visible: before 3.11 a subscripted generic answers `isinstance(..., type)`, so
+it admits nothing, and from 3.11 it is called instead and admits everything.
+Both libraries flip together.
+
 A dict key that is not a string is a **clause** when it is a schema and a
 **declared key** when it is a constant: `{int: str}` says nothing about a
 mapping with no int key, and `{1: str}` says the mapping carries a `1`.

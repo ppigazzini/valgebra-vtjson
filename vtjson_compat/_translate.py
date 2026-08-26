@@ -9,10 +9,10 @@ meaning is expressed with the algebra so the accept/reject decision matches.
 import importlib
 import math
 from collections import UserString
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Container, Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from types import UnionType
-from typing import Annotated, Union, get_args, get_origin
+from typing import Annotated, Any, Union, get_args, get_origin
 
 from ._valgebra_api import CompiledValidator
 from ._valgebra_api import (
@@ -190,6 +190,10 @@ def _translate(  # noqa: PLR0911
         return schema
     if schema is None:
         return _validator(None)
+    if schema is Any:
+        # vtjson names `Any` outright and admits everything. Before 3.11 it is
+        # not a class, so the branch below does not catch it.
+        return _validator(_anything)
     if isinstance(schema, type) and get_origin(schema) is None:
         # A subscripted builtin generic answers `isinstance(..., type)` before
         # 3.11, so asking that alone reads `dict[str, int]` as a class and hands
@@ -203,11 +207,24 @@ def _translate(  # noqa: PLR0911
         return _translate_tuple(schema, open_records=open_records)
     if isinstance(schema, AbstractSet):
         return _translate_set(schema, open_records=open_records)
-    if isinstance(schema, Mapping):
-        return _foreign_container(schema, dict, open_records=open_records)
-    if isinstance(schema, Sequence) and not isinstance(schema, _TEXT):
-        return _foreign_container(schema, list, open_records=open_records)
+    kind = _foreign_kind(schema)
+    if kind is not None:
+        return _foreign_container(schema, kind, open_records=open_records)
     return _translate_leaf(schema, exact=exact, open_records=open_records)
+
+
+def _foreign_kind(schema: object) -> type | None:
+    """Return the builtin a container schema written outside them reads as.
+
+    `None` for a schema that is not a container at all. Text is excluded: a
+    string is a sequence of strings, so reading one as a container descends
+    forever.
+    """
+    if isinstance(schema, Mapping):
+        return dict
+    if isinstance(schema, Sequence) and not isinstance(schema, _TEXT):
+        return list
+    return None
 
 
 def _translate_leaf(
@@ -242,8 +259,8 @@ def _translate_leaf(
         # is a schema valgebra reads directly. Several are also callable, and
         # calling one builds a container from the value rather than judging it:
         # `list[int]("a")` is `["a"]`, which a predicate reads as a pass.
-        return _validator(
-            _translated_alias(schema, origin, exact=exact, open_records=open_records)
+        return _translated_generic(
+            schema, origin, exact=exact, open_records=open_records
         )
     if callable(schema):
         if getattr(schema, "_vtjson_nullary", False):
@@ -262,6 +279,77 @@ def _translate_leaf(
 # spellings of a union are listed: before 3.14 `X | Y` and `Union[X, Y]` report
 # different origins.
 _PARAMETERISED = (list, set, frozenset, tuple, dict, Union, UnionType)
+
+
+def _translated_generic(
+    schema: object, origin: object, *, exact: bool, open_records: bool
+) -> CompiledValidator:
+    """Translate a subscripted generic by the kind its origin names.
+
+    vtjson asks what the origin is: a `Mapping` subclass gives a mapping over two
+    arguments, any other `Container` subclass gives a collection over one, and
+    the value must be an instance of the origin as well. The rule is not
+    restricted to the builtins, so `Sequence[int]` and `deque[int]` are schemas.
+    """
+    if origin in _PARAMETERISED:
+        return _validator(
+            _translated_alias(schema, origin, exact=exact, open_records=open_records)
+        )
+    if isinstance(origin, type):
+        if issubclass(origin, Mapping):
+            return _foreign_generic(schema, origin, dict, open_records=open_records)
+        if issubclass(origin, Container):
+            return _foreign_generic(schema, origin, list, open_records=open_records)
+    try:
+        return _validator(schema)
+    except NotImplementedError:
+        # An origin naming neither kind has no node to become, and vtjson has
+        # none either: it falls through to the rule for any other schema, which
+        # is an instance check for a class and a call for anything callable.
+        if isinstance(schema, type):
+            # A subscripted generic answers `isinstance(..., type)` before 3.11,
+            # and an instance check against one raises rather than deciding — so
+            # the schema admits nothing. vtjson's verdict on `type[int]` flips
+            # with the interpreter for exactly this reason.
+            return _complement(_validator(_anything))
+        return _predicate(schema)
+
+
+def _foreign_generic(
+    schema: object, origin: type, kind: type, *, open_records: bool
+) -> CompiledValidator:
+    """Translate a generic whose origin is a container class outside the builtins.
+
+    valgebra builds its container nodes from the builtins, so the shape is
+    decided by the equivalent builtin over a converted value and the origin by an
+    atom beside it — as for a container schema written in a foreign class. A
+    value that will not convert is not one the origin admits either.
+    """
+    arguments = get_args(schema)
+    if kind is dict:
+        if len(arguments) != _MAPPING_ARGUMENTS:
+            msg = "Number of arguments of mapping is not two"
+            raise SchemaError(msg)
+        key, value = (_translate(item, open_records=open_records) for item in arguments)
+        inner = _validator({key: value})
+    else:
+        if len(arguments) != 1:
+            msg = "Number of arguments of Generic type is not one"
+            raise SchemaError(msg)
+        element = _translate(arguments[0], open_records=open_records)
+        inner = _validator([element, ...])
+
+    def check(obj: object) -> bool:
+        try:
+            return inner.is_valid(kind(obj))
+        except Exception:  # noqa: BLE001  (a value that will not convert is not one)
+            return False
+
+    return _intersect(_validator(origin), _predicate(check))
+
+
+# A mapping generic carries its key and its value, and nothing else.
+_MAPPING_ARGUMENTS = 2
 
 
 def _translated_alias(
@@ -298,7 +386,7 @@ _TEXT = (str, bytes, bytearray, UserString)
 
 
 def _foreign_container(
-    schema: Mapping[object, object] | Sequence[object],
+    schema: object,
     kind: type,
     *,
     open_records: bool,
