@@ -91,9 +91,6 @@ from ._valgebra_api import (
     anything as _anything,
 )
 from ._valgebra_api import (
-    lax as _lax,
-)
-from ._valgebra_api import (
     nothing as _nothing,
 )
 
@@ -192,7 +189,4 @@ def validate(
             "express recursion with valgebra's recursive fixpoint"
         )
         raise NotImplementedError(msg)
-    validator = _translate(schema)
-    if not strict:
-        validator = _lax(validator)
-    validator.validate(obj)
+    _translate(schema, open_records=not strict).validate(obj)

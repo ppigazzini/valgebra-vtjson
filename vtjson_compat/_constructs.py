@@ -38,12 +38,6 @@ from ._valgebra_api import (
     intersect as _intersect,
 )
 from ._valgebra_api import (
-    lax as _lax,
-)
-from ._valgebra_api import (
-    strict as _strict,
-)
-from ._valgebra_api import (
     union as _union,
 )
 from ._valgebra_api import (
@@ -409,9 +403,7 @@ def make_type(
             "express recursion with valgebra's recursive fixpoint"
         )
         raise NotImplementedError(msg)
-    validator = _translate(schema)
-    if not strict:
-        validator = _lax(validator)
+    validator = _translate(schema, open_records=not strict)
 
     class _Meta(type):
         def __instancecheck__(cls, instance: object) -> bool:
@@ -426,10 +418,21 @@ def safe_cast(schema: object, obj: object) -> object:
 
 
 def lax(schema: object) -> CompiledValidator:
-    """Open every record in the schema's subtree (undeclared keys allowed)."""
-    return _lax(_translate(schema))
+    """Admit a key no clause of its record claims, throughout the subtree.
+
+    Laxness settles only what happens to an *unclaimed* key. A record's named
+    fields and its typed catch-all are clauses either way, so both still decide
+    the keys they claim.
+    """
+    return _translate(schema, open_records=True)
 
 
 def strict(schema: object) -> CompiledValidator:
-    """Close every record in the schema's subtree (undeclared keys rejected)."""
-    return _strict(_translate(schema))
+    """Reject a key no clause of its record claims, throughout the subtree.
+
+    That is what a translated schema already denotes, so this is the identity on
+    a spec. It is not the identity on an already-built validator: a validator
+    carries the mode it was built with, and vtjson's innermost wrapper is the one
+    that decides.
+    """
+    return _translate(schema)

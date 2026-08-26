@@ -72,13 +72,17 @@ valgebra follows the typing spec's model of literals and so decides differently.
 | `email`, `domain_name` | always available | need the `valgebra-vtjson[formats]` extra | Install the extra. |
 | A value that raises under inspection | most constructs let the exception out of `validate`, so a value with a raising `__len__`, `__contains__`, `__eq__` or property crashes the call | the value is rejected, and the violation names the value rather than the predicate that inspected it | Catch `ValidationError`, not the value's own exception. A rejection where vtjson crashes is the one direction this layer does not follow it. |
 | Your own raising predicate | swallowed into a generic failure | surfaced as a distinct `predicate_error` | Read `err.code`: `predicate_error` means the callable you supplied raised, which is a bug in the predicate rather than a property of the value. |
-| `lax`/`strict` nesting | the innermost wrapper wins: a `lax` inside a `strict` stays open, because each wrapper imposes its mode on everything below it | the outermost wins: `lax` and `strict` set a flag on the compiled record, so the last one applied decides. `validate(..., strict=False)` likewise opens a record an inner `strict()` closed | Apply the wrapper you mean at the outermost point, and do not rely on an inner wrapper overriding an outer one. |
-| `lax` over a catch-all | a key the catch-all claims must still satisfy it; laxness excuses only a key no clause claims | opening a record drops its catch-all clause, so a claimed key with a failing value is admitted | Validate the mixed dict without `lax`, or state the permitted extra keys as another clause. |
 | Fixed-length sequences | `len(obj)` is called, so a `list` subclass with a raising `__len__` crashes the call | the real sequence is read without invoking a Python-level `__len__` override, so such a value is judged on its actual contents | None for ordinary values. A `list` subclass that lies about its length is validated on what it holds. |
 | `make_type`'s `subs` | performs the substitution | accepts the argument and raises `NotImplementedError` when it is non-empty | Express recursion with valgebra's `recursive` fixpoint. Ignoring the argument would build a type over a schema the caller did not ask for. |
 | A `UserDict` written as a schema | dispatched as a mapping, and the value must be a `UserDict` | read as a constant, so no mapping satisfies it | Write the schema as a plain `dict`. valgebra's mapping node requires a real `dict`, so matching would cost a per-key predicate. |
 | Schema nesting depth | unbounded short of Python's own recursion | a schema reaching 128 levels of valgebra nesting is refused when it is built; a one-element list costs about three levels per source level, so `[[[…]]]` reaches its limit at 43 | Flatten the schema, or express the repetition with a homogeneous `[T, ...]`, which costs one level. |
 | `Apply` / `skip_first` | reorder how `Annotated` arguments apply | not supported (the layer applies `Annotated` metadata in declaration order) | Reorder the `Annotated` arguments instead; valgebra has no apply-order modifier. |
+
+Strictness settles only what happens to a key **no** clause claims: `strict`
+rejects it, `lax` admits it. A record's named fields and its typed catch-all are
+clauses either way, so neither mode discards them. Nesting follows vtjson too —
+each wrapper builds a validator, and an enclosing wrapper cannot reach inside
+one, so the innermost mode stands.
 
 A dict key that more than one clause claims — a named field whose own
 catch-all also matches its name — belongs when **any** of those clauses admits

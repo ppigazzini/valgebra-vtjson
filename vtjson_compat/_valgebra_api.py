@@ -4,10 +4,10 @@ This compatibility layer was first written against an earlier valgebra extension
 API (``CompiledValidator``, ``validator``, ``intersect``, ``lax``, ``strict``,
 ``fixed_sequence``). The shipped valgebra exposes the validator class as
 ``Validator`` with a schema-spec constructor, the combinators ``union`` /
-``intersection`` / ``complement`` / ``recursive``, the constants ``anything`` /
-``nothing``, and ``Validator.open`` / ``Validator.close`` for the lax/strict
-record modes. This module re-expresses the names the rest of the package uses in
-terms of that surface, so the translator and constructs need no other change.
+``intersection`` / ``complement`` / ``recursive``, and the constants
+``anything`` / ``nothing``. This module re-expresses the names the rest of the
+package uses in terms of that surface, so the translator and constructs need no
+other change.
 """
 
 from typing import Annotated
@@ -35,9 +35,7 @@ __all__ = [
     "fixed_sequence",
     "ifthen",
     "intersect",
-    "lax",
     "nothing",
-    "strict",
     "union",
     "validator",
 ]
@@ -66,16 +64,6 @@ def fixed_sequence(*elements: object) -> CompiledValidator:
     if len(elements) == 1:
         return CompiledValidator(Annotated[list[elements[0]], _ExactLen(1)])  # ty: ignore[invalid-type-form]
     return CompiledValidator(list(elements))
-
-
-def lax(value: CompiledValidator) -> CompiledValidator:
-    """Open every record in ``value`` (lax mode), via ``Validator.open``."""
-    return value.open()
-
-
-def strict(value: CompiledValidator) -> CompiledValidator:
-    """Close every record in ``value`` (strict mode), via ``Validator.close``."""
-    return value.close()
 
 
 def ifthen(

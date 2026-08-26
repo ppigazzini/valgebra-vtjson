@@ -14,6 +14,12 @@ from typing import Annotated
 
 from ._valgebra_api import CompiledValidator
 from ._valgebra_api import (
+    anything as _anything,
+)
+from ._valgebra_api import (
+    complement as _complement,
+)
+from ._valgebra_api import (
     fixed_sequence as _fixed_sequence,
 )
 from ._valgebra_api import (
@@ -164,12 +170,19 @@ def _near(value: float) -> CompiledValidator:
     return _predicate(check)
 
 
-def _translate(schema: object, *, exact: bool = False) -> CompiledValidator:  # noqa: PLR0911
+def _translate(  # noqa: PLR0911
+    schema: object, *, exact: bool = False, open_records: bool = False
+) -> CompiledValidator:
     """Translate a vtjson-style schema spec into a valgebra validator.
 
     With ``exact``, a float constant is matched by equality rather than by
     tolerance. Dict keys are looked up, not compared, so vtjson matches a float
     key exactly even though it matches a float *value* approximately.
+
+    With ``open_records``, every dict in the subtree admits a key no clause of
+    its own claims — vtjson's lax mode. A validator already built is returned
+    unchanged, so a wrapper cannot reach inside one and the innermost mode
+    stands, as it does in vtjson.
     """
     if isinstance(schema, CompiledValidator):
         return schema
@@ -178,13 +191,13 @@ def _translate(schema: object, *, exact: bool = False) -> CompiledValidator:  # 
     if isinstance(schema, type):
         return _translate_type(schema)
     if isinstance(schema, dict):
-        return _translate_dict(schema)
+        return _translate_dict(schema, open_records=open_records)
     if isinstance(schema, list):
-        return _translate_list(schema)
+        return _translate_list(schema, open_records=open_records)
     if isinstance(schema, tuple):
-        return _translate_tuple(schema)
+        return _translate_tuple(schema, open_records=open_records)
     if isinstance(schema, AbstractSet):
-        return _translate_set(schema)
+        return _translate_set(schema, open_records=open_records)
     return _translate_leaf(schema, exact=exact)
 
 
@@ -233,45 +246,59 @@ def _of_own_class(schema: object, structure: CompiledValidator) -> CompiledValid
     return _intersect(structure, _validator(kind))
 
 
-def _translate_list(schema: list[object]) -> CompiledValidator:
+def _translate_list(
+    schema: list[object], *, open_records: bool = False
+) -> CompiledValidator:
     # vtjson: a trailing `...` repeats the element just before it, so `[T, ...]`
     # is a homogeneous list and `[A, ..., Z, ...]` is a fixed prefix then the last
     # element repeated; `[A, B, C]` is a fixed-length positional list; `[]`
     # matches only the empty list. valgebra's native list form expresses each.
     if schema and schema[-1] is Ellipsis:
-        prefix = [_translate(item) for item in schema[:-1]]
+        prefix = [_translate(item, open_records=open_records) for item in schema[:-1]]
         return _of_own_class(schema, _validator([*prefix, ...]))
     return _of_own_class(
-        schema, _fixed_sequence(*(_translate(item) for item in schema))
+        schema,
+        _fixed_sequence(
+            *(_translate(item, open_records=open_records) for item in schema)
+        ),
     )
 
 
-def _translate_tuple(schema: tuple[object, ...]) -> CompiledValidator:
+def _translate_tuple(
+    schema: tuple[object, ...], *, open_records: bool = False
+) -> CompiledValidator:
     # vtjson reads a trailing `...` as it does for lists: the element before it
     # repeats after a fixed prefix. valgebra's frontend expresses every tuple
     # shape, so `(T, ...)`, the prefix form `(A, B, ...)`, and the fixed-length
     # `(A, B, C)` all translate. The subscription drives the frontend at runtime,
     # not as a static type.
     if schema and schema[-1] is Ellipsis:
-        args = (*(_translate(item) for item in schema[:-1]), Ellipsis)
+        args = (
+            *(_translate(item, open_records=open_records) for item in schema[:-1]),
+            Ellipsis,
+        )
         return _of_own_class(schema, _validator(tuple[args]))  # ty: ignore[invalid-type-form]
     # valgebra reads a fixed-length tuple as the subscription `tuple[A, B]`, not a
     # tuple literal, so build the generic alias from the translated elements.
-    fixed = tuple(_translate(item) for item in schema)
+    fixed = tuple(_translate(item, open_records=open_records) for item in schema)
     return _of_own_class(schema, _validator(tuple[fixed]))  # ty: ignore[invalid-type-form]
 
 
-def _translate_set(schema: AbstractSet[object]) -> CompiledValidator:
+def _translate_set(
+    schema: AbstractSet[object], *, open_records: bool = False
+) -> CompiledValidator:
     # vtjson reads a set schema as "every element matches one of these schemas":
     # a single element is homogeneous, several union, and the empty set `set()`
     # matches only the empty set. valgebra expresses each as a set of the union
     # of the element schemas (an empty union is the uninhabited element type, so
     # `set()` becomes the set whose only member is the empty set).
-    element = _union(*(_translate(item) for item in schema))
+    element = _union(*(_translate(item, open_records=open_records) for item in schema))
     return _of_own_class(schema, _validator(set[element]))  # ty: ignore[invalid-type-form]
 
 
-def _translate_dict(schema: dict[object, object]) -> CompiledValidator:
+def _translate_dict(
+    schema: dict[object, object], *, open_records: bool = False
+) -> CompiledValidator:
     if not schema:
         return _of_own_class(schema, _validator({}))
     # A string key is a record field (a trailing "?" marks it optional); any
@@ -280,7 +307,10 @@ def _translate_dict(schema: dict[object, object]) -> CompiledValidator:
     # — so records, single mappings, multi-clause maps, and a record mixed with a
     # catch-all all translate uniformly.
     catch_alls = {
-        key: (_translate(key, exact=True), _translate(value))
+        key: (
+            _translate(key, exact=True),
+            _translate(value, open_records=open_records),
+        )
         for key, value in schema.items()
         if not isinstance(key, str)
     }
@@ -293,14 +323,33 @@ def _translate_dict(schema: dict[object, object]) -> CompiledValidator:
         # vtjson admits a key when *any* clause claiming it admits the value, so
         # a field its own catch-alls also claim has more than one way to pass.
         # Which catch-alls claim a literal key is settled here, not per value.
-        field = _translate(value)
+        field = _translate(value, open_records=open_records)
         alternatives = [
             clause
             for pattern, clause in catch_alls.values()
             if pattern.is_valid(_field_name(key))
         ]
         translated[key] = _union(field, *alternatives) if alternatives else field
+    if open_records:
+        translated[_unclaimed_key(schema, catch_alls)] = _validator(_anything)
     return _of_own_class(schema, _validator(translated))
+
+
+def _unclaimed_key(
+    schema: dict[object, object],
+    catch_alls: dict[object, tuple[CompiledValidator, CompiledValidator]],
+) -> CompiledValidator:
+    """Build the key schema for the keys no clause of ``schema`` claims.
+
+    Laxness excuses a key **no** clause matches, so the permissive clause is the
+    complement of the ones that do. Giving it every key instead — which is what
+    opening a compiled record does — would subsume the narrower clauses and free
+    the keys the schema was written to constrain.
+    """
+    claimed = [
+        _validator(_field_name(key)) for key in schema if isinstance(key, str)
+    ] + [pattern for pattern, _ in catch_alls.values()]
+    return _complement(_union(*claimed))
 
 
 def _field_name(key: str) -> str:
