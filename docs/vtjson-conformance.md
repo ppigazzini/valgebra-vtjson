@@ -88,6 +88,10 @@ clauses either way, so neither mode discards them. Nesting follows vtjson too �
 each wrapper builds a validator, and an enclosing wrapper cannot reach inside
 one, so the innermost mode stands.
 
+A dict key that is not a string is a **clause** when it is a schema and a
+**declared key** when it is a constant: `{int: str}` says nothing about a
+mapping with no int key, and `{1: str}` says the mapping carries a `1`.
+
 A dict key that more than one clause claims — a named field whose own
 catch-all also matches its name — belongs when **any** of those clauses admits
 the value, as in vtjson. Which catch-alls claim a literal key is settled when

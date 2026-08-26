@@ -8,7 +8,7 @@ meaning is expressed with the algebra so the accept/reject decision matches.
 
 import importlib
 import math
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from collections.abc import Set as AbstractSet
 from typing import Annotated
 
@@ -351,7 +351,11 @@ def _translate_dict(
         translated[key] = _union(field, *alternatives) if alternatives else field
     if open_records:
         translated[_unclaimed_key(schema, catch_alls)] = _validator(_anything)
-    return _of_own_class(schema, _validator(translated))
+    built = _of_own_class(schema, _validator(translated))
+    declared = tuple(
+        key for key in schema if not isinstance(key, str) and not _is_key_schema(key)
+    )
+    return _intersect(built, _carries(declared)) if declared else built
 
 
 def _unclaimed_key(
@@ -369,6 +373,38 @@ def _unclaimed_key(
         _validator(_field_name(key)) for key in schema if isinstance(key, str)
     ] + [pattern for pattern, _ in catch_alls.values()]
     return _complement(_union(*claimed))
+
+
+def _is_key_schema(key: object) -> bool:
+    """Whether a non-string dict key constrains other keys rather than being one.
+
+    vtjson reads a key that is a *schema* — a type, a construct, a container
+    form — as a clause over the keys it matches, and a key that is a *constant*
+    as a key the value must carry. `{int: str}` says nothing about a mapping
+    with no int key; `{1: str}` says the mapping has a `1`.
+    """
+    return isinstance(key, type | CompiledValidator | tuple | frozenset) or callable(
+        key
+    )
+
+
+def _carries(keys: tuple[object, ...]) -> CompiledValidator:
+    """Build the schema of mappings carrying every one of ``keys``.
+
+    valgebra names a record's fields with strings, so a declared key of any other
+    type is a clause plus this presence check — the clause decides the value, and
+    this decides that there is one.
+    """
+
+    def check(obj: object) -> bool:
+        if not isinstance(obj, Mapping):
+            return False
+        try:
+            return all(key in obj for key in keys)
+        except Exception:  # noqa: BLE001  (a mapping that cannot answer has no such key)
+            return False
+
+    return _predicate(check)
 
 
 def _field_name(key: str) -> str:

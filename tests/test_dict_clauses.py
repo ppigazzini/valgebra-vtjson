@@ -108,3 +108,47 @@ def test_a_key_belongs_if_any_applicable_clause_admits_it(
     assert not divergences, f"{label}: " + ", ".join(
         f"{obj!r} vtjson={a} layer={b}" for obj, a, b in divergences
     )
+
+
+# A non-string key is a clause when it is a *schema* and a declared key when it
+# is a *constant*. vtjson splits them that way, and only the second is required
+# to be present.
+KEY_KINDS: list[tuple[str, Callable[[Any], object], list[object]]] = [
+    ("float key", lambda m: {1.5: str}, [{}, {1.5: "x"}, {1.5: 1}, {"a": "x"}]),  # noqa: ARG005
+    ("int key", lambda m: {1: str}, [{}, {1: "x"}, {1: 1}, {"a": "x"}]),  # noqa: ARG005
+    ("bool key", lambda m: {True: str}, [{}, {True: "x"}, {True: 1}]),  # noqa: ARG005
+    ("none key", lambda m: {None: str}, [{}, {None: "x"}, {None: 1}]),  # noqa: ARG005
+    ("tuple key", lambda m: {(1, 2): str}, [{}, {(1, 2): "x"}]),  # noqa: ARG005
+    ("type key", lambda m: {str: int}, [{}, {"a": 1}, {"a": "x"}]),  # noqa: ARG005
+    ("int type key", lambda m: {int: str}, [{}, {1: "x"}, {1: 1}]),  # noqa: ARG005
+    (
+        "constant and named",
+        lambda m: {1: str, "a": int},  # noqa: ARG005
+        [{}, {1: "x"}, {"a": 1}, {1: "x", "a": 1}, {1: 1, "a": 1}],
+    ),
+    (
+        "constant and catch-all",
+        lambda m: {1: str, str: int},  # noqa: ARG005
+        [{}, {1: "x"}, {1: "x", "b": 2}, {1: "x", "b": "z"}],
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    ("label", "build", "objects"), KEY_KINDS, ids=[k[0] for k in KEY_KINDS]
+)
+def test_a_constant_key_is_declared_and_a_schema_key_is_a_clause(
+    label: str,
+    build: Callable[[Any], object],
+    objects: list[object],
+) -> None:
+    """A constant key must be present; a schema key only constrains what matches."""
+    reference, layer = build(vt), build(vg)
+    divergences = [
+        (obj, _decide(vt, reference, obj), _decide(vg, layer, obj))
+        for obj in objects
+        if _decide(vt, reference, obj) != _decide(vg, layer, obj)
+    ]
+    assert not divergences, f"{label}: " + ", ".join(
+        f"{obj!r} vtjson={a} layer={b}" for obj, a, b in divergences
+    )
