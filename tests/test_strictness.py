@@ -11,7 +11,8 @@ outright. Both lose the constraint the schema was written to carry.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+import dataclasses
+from typing import TYPE_CHECKING, Any, NamedTuple, TypedDict
 
 import pytest
 import vtjson as vt
@@ -146,6 +147,53 @@ def test_laxness_frees_the_positions_a_sequence_does_not_declare(
     objects: list[object],
 ) -> None:
     """A declared position still decides; an undeclared one is free."""
+    reference, layer = build(vt), build(vg)
+    divergences = [
+        (obj, _decide(vt, reference, obj), _decide(vg, layer, obj))
+        for obj in objects
+        if _decide(vt, reference, obj) != _decide(vg, layer, obj)
+    ]
+    assert not divergences, f"{label}: " + ", ".join(
+        f"{obj!r} vtjson={a} layer={b}" for obj, a, b in divergences
+    )
+
+
+class _Point(NamedTuple):
+    a: int
+
+
+@dataclasses.dataclass
+class _Boxed:
+    a: int
+
+
+class _Row(TypedDict):
+    a: int
+
+
+# A class can declare keys too. Laxness reaches the ones that do, and leaves the
+# ones that do not — an instance check has no undeclared key to free.
+CLASS_VALUES: list[object] = [{"a": 1}, {"a": "x"}, {"a": 1, "b": 2}, {}, 1]
+
+CLASS_ROWS: list[tuple[str, Callable[[Any], object], list[object]]] = [
+    ("lax of a TypedDict", lambda m: m.lax(_Row), CLASS_VALUES),
+    ("strict of a TypedDict", lambda m: m.strict(_Row), CLASS_VALUES),
+    ("a TypedDict as written", lambda m: _Row, CLASS_VALUES),  # noqa: ARG005
+    ("lax of a dataclass", lambda m: m.lax(_Boxed), [_Boxed(1), {"a": 1}, 1]),
+    ("lax of a NamedTuple", lambda m: m.lax(_Point), [_Point(1), (1,), (1, 2), 1]),
+    ("lax of a scalar", lambda m: m.lax(int), [1, "x", None]),
+]
+
+
+@pytest.mark.parametrize(
+    ("label", "build", "objects"), CLASS_ROWS, ids=[r[0] for r in CLASS_ROWS]
+)
+def test_laxness_reaches_a_class_that_declares_keys(
+    label: str,
+    build: Callable[[Any], object],
+    objects: list[object],
+) -> None:
+    """A `TypedDict` declares keys, so laxness frees the ones it does not."""
     reference, layer = build(vt), build(vg)
     divergences = [
         (obj, _decide(vt, reference, obj), _decide(vg, layer, obj))

@@ -81,7 +81,9 @@ valgebra follows the typing spec's model of literals and so decides differently.
 Strictness settles only what happens to a key or a position the schema does
 **not** declare: `strict` rejects it, `lax` admits it. A fixed-length sequence
 declares positions the way a record declares keys, so a lax `[int, str]` checks
-those two and admits whatever follows them. A record's named fields and its typed catch-all are
+those two and admits whatever follows them, and a `TypedDict` declares keys the
+same way. A class that declares nothing — an instance check, an enum — has no
+undeclared member for laxness to free. A record's named fields and its typed catch-all are
 clauses either way, so neither mode discards them. Nesting follows vtjson too —
 each wrapper builds a validator, and an enclosing wrapper cannot reach inside
 one, so the innermost mode stands.

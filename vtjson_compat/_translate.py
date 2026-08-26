@@ -189,7 +189,7 @@ def _translate(  # noqa: PLR0911
     if schema is None:
         return _validator(None)
     if isinstance(schema, type):
-        return _translate_type(schema)
+        return _translate_type(schema, open_records=open_records)
     if isinstance(schema, dict):
         return _translate_dict(schema, open_records=open_records)
     if isinstance(schema, list):
@@ -215,7 +215,7 @@ def _translate_leaf(schema: object, *, exact: bool) -> CompiledValidator:
     return _validator(schema)
 
 
-def _translate_type(schema: type) -> CompiledValidator:
+def _translate_type(schema: type, *, open_records: bool = False) -> CompiledValidator:
     builder = _SCALAR.get(schema)
     if builder is not None:
         return builder()
@@ -224,7 +224,15 @@ def _translate_type(schema: type) -> CompiledValidator:
     # Any other class translates directly: valgebra reads dataclasses, NamedTuples,
     # Enums, TypedDicts, and runtime Protocols structurally, and a bare class as an
     # instance check — the isinstance semantics vtjson gives a plain type.
-    return _validator(schema)
+    built = _validator(schema)
+    if open_records:
+        # A `TypedDict` declares keys, so laxness frees the ones it does not.
+        # `open` reaches a record and nothing else, which is the whole rule: an
+        # instance check and an attribute schema declare no key to free, and a
+        # declared field keeps deciding because a named field takes precedence
+        # over the clause opening adds.
+        return built.open()
+    return built
 
 
 # The plain builtins carry no demand beyond their kind. Any other class a
