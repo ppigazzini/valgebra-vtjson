@@ -6,6 +6,13 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- valgebra 0.0.9 or later. It reads a marker that is itself callable by asking
+  it, so a `functools.partial` written as a vtjson predicate keeps the arguments
+  bound to it. Under 0.0.8 the layer took the partial's `.func` and dropped
+  them, and `partial(eq, 1)` refused every value where vtjson admits `1`.
+
 ### Added
 
 - A schema that contains itself is a recursive schema. A record holding itself,
