@@ -29,6 +29,11 @@ and the three sets must cover that surface exactly, so a vtjson release adding
 a construct fails the suite until someone classifies it. Read that file for the
 roll-call; a second copy in this page could only drift away from it.
 
+A container class that is not a builtin — a `UserDict`, a `Counter`, a
+`UserList`, a `deque` — is still a container schema: it is read for its shape
+and admits only its own class, as in vtjson. Text is excluded, because a string
+is a sequence of strings and reading one that way descends forever.
+
 A container schema carries the class it is written in: an `OrderedDict` schema
 admits no plain `dict`, and a named tuple schema admits no plain tuple, as in
 vtjson. A `frozenset` schema is uninhabited for the same reason it is in vtjson
@@ -74,7 +79,6 @@ valgebra follows the typing spec's model of literals and so decides differently.
 | Your own raising predicate | swallowed into a generic failure | surfaced as a distinct `predicate_error` | Read `err.code`: `predicate_error` means the callable you supplied raised, which is a bug in the predicate rather than a property of the value. |
 | Fixed-length sequences | `len(obj)` is called, so a `list` subclass with a raising `__len__` crashes the call | the real sequence is read without invoking a Python-level `__len__` override, so such a value is judged on its actual contents | None for ordinary values. A `list` subclass that lies about its length is validated on what it holds. |
 | `make_type`'s `subs` | performs the substitution | accepts the argument and raises `NotImplementedError` when it is non-empty | Express recursion with valgebra's `recursive` fixpoint. Ignoring the argument would build a type over a schema the caller did not ask for. |
-| A `UserDict` written as a schema | dispatched as a mapping, and the value must be a `UserDict` | read as a constant, so no mapping satisfies it | Write the schema as a plain `dict`. valgebra's mapping node requires a real `dict`, so matching would cost a per-key predicate. |
 | Schema nesting depth | unbounded short of Python's own recursion | a schema reaching 128 levels of valgebra nesting is refused when it is built; a one-element list costs about three levels per source level, so `[[[…]]]` reaches its limit at 43 | Flatten the schema, or express the repetition with a homogeneous `[T, ...]`, which costs one level. |
 | `Apply` / `skip_first` | reorder how `Annotated` arguments apply | not supported (the layer applies `Annotated` metadata in declaration order) | Reorder the `Annotated` arguments instead; valgebra has no apply-order modifier. |
 

@@ -8,7 +8,8 @@ meaning is expressed with the algebra so the accept/reject decision matches.
 
 import importlib
 import math
-from collections.abc import Callable, Mapping
+from collections import UserString
+from collections.abc import Callable, Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from typing import Annotated, Union, get_args, get_origin
 
@@ -201,6 +202,10 @@ def _translate(  # noqa: PLR0911
         return _translate_tuple(schema, open_records=open_records)
     if isinstance(schema, AbstractSet):
         return _translate_set(schema, open_records=open_records)
+    if isinstance(schema, Mapping):
+        return _foreign_container(schema, dict, open_records=open_records)
+    if isinstance(schema, Sequence) and not isinstance(schema, _TEXT):
+        return _foreign_container(schema, list, open_records=open_records)
     return _translate_leaf(schema, exact=exact)
 
 
@@ -263,6 +268,37 @@ def _translated_alias(schema: object, origin: object, *, exact: bool) -> object:
         return _union(*arguments)
     # A subscriptable origin, since `_PARAMETERISED` lists only those.
     return origin[arguments]  # ty: ignore[not-subscriptable]
+
+
+# Text is a sequence of text, so reading one as a container schema descends
+# forever. vtjson raises `RecursionError` on a `UserString` schema for that
+# reason; this stops before the same edge rather than following it there.
+_TEXT = (str, bytes, bytearray, UserString)
+
+
+def _foreign_container(
+    schema: Mapping[object, object] | Sequence[object],
+    kind: type,
+    *,
+    open_records: bool,
+) -> CompiledValidator:
+    """Translate a container schema whose class is not one valgebra builds from.
+
+    vtjson dispatches a container on its abstract kind and then demands the value
+    be the literal's own class, so a `UserDict` schema reads as a mapping and
+    admits only a `UserDict`. valgebra's mapping and sequence nodes are built
+    from the builtins, so the shape is decided by the equivalent builtin schema
+    over a converted value, and the class by an atom beside it.
+    """
+    inner = _translate(kind(schema), open_records=open_records)
+
+    def check(obj: object) -> bool:
+        try:
+            return inner.is_valid(kind(obj))
+        except Exception:  # noqa: BLE001  (a value that will not convert is not one)
+            return False
+
+    return _intersect(_validator(type(schema)), _predicate(check))
 
 
 def _translate_type(schema: type, *, open_records: bool = False) -> CompiledValidator:

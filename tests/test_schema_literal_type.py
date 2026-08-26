@@ -13,7 +13,15 @@ uninhabited. Matching it is what a 1:1 layer owes; diverging in the direction of
 
 from __future__ import annotations
 
-from collections import OrderedDict, defaultdict, namedtuple
+from collections import (
+    Counter,
+    OrderedDict,
+    UserDict,
+    UserList,
+    defaultdict,
+    deque,
+    namedtuple,
+)
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -86,6 +94,39 @@ def test_the_schema_literal_s_class_is_part_of_the_contract(
         (obj, _decide(vt, reference, obj), _decide(vg, layer, obj))
         for obj in objects
         if _decide(vt, reference, obj) != _decide(vg, layer, obj)
+    ]
+    assert not divergences, f"{label}: " + ", ".join(
+        f"{obj!r} vtjson={a} layer={b}" for obj, a, b in divergences
+    )
+
+
+# A container class that is not a builtin is still a container schema: vtjson
+# dispatches it on the abstract kind and demands the value be that class.
+FOREIGN: list[tuple[str, Any, list[object]]] = [
+    (
+        "UserDict schema",
+        UserDict({"a": int}),
+        [UserDict(a=1), UserDict(a="x"), {"a": 1}, OrderedDict(a=1)],
+    ),
+    ("Counter schema", Counter({"a": int}), [Counter(a=1), {"a": 1}]),
+    ("UserList schema", UserList([int]), [UserList([1]), UserList(["x"]), [1]]),
+    ("deque schema", deque([int]), [deque([1]), deque(["x"]), [1]]),
+]
+
+
+@pytest.mark.parametrize(
+    ("label", "schema", "objects"), FOREIGN, ids=[f[0] for f in FOREIGN]
+)
+def test_a_container_class_outside_the_builtins_is_still_a_container(
+    label: str,
+    schema: Any,
+    objects: list[object],
+) -> None:
+    """Read for its shape, and demanded of the value by its class."""
+    divergences = [
+        (obj, _decide(vt, schema, obj), _decide(vg, schema, obj))
+        for obj in objects
+        if _decide(vt, schema, obj) != _decide(vg, schema, obj)
     ]
     assert not divergences, f"{label}: " + ", ".join(
         f"{obj!r} vtjson={a} layer={b}" for obj, a, b in divergences
