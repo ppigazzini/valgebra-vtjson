@@ -72,7 +72,7 @@ valgebra follows the typing spec's model of literals and so decides differently.
 | Error type | raises `vtjson.ValidationError` | raises `valgebra` `ValidationError` (a different class, with structured `code`/`path`/`expected`/`value`) | Catch `vtjson_compat.ValidationError`. `is_valid`-style checks never raise. |
 | Error report | one first-failure string | one structured violation | Read `err.code`/`err.path` instead of parsing a message. |
 | `float` | also admits `int` | mapped to `union(int, float)`, so the decision matches | None — parity holds. valgebra's own `float` is floats-only, equal to vtjson's `float_`. |
-| Recursion | `set_label` + validate-time `subs` | not supported; `set_name`/`set_label` are accepted but their labels are ignored | Express recursion with valgebra's `recursive` fixpoint. |
+| Labelled recursion | `set_label` + validate-time `subs` | not supported; `set_name`/`set_label` are accepted but their labels are ignored | Express recursion by self-reference, which is supported, or with valgebra's `recursive` fixpoint. |
 | `magic` | always available (libmagic installed) | needs the `valgebra-vtjson[magic]` extra | Install the extra, or replace with a predicate. |
 | `email`, `domain_name` | always available | need the `valgebra-vtjson[formats]` extra | Install the extra. |
 | A value that raises under inspection | most constructs let the exception out of `validate`, so a value with a raising `__len__`, `__contains__`, `__eq__` or property crashes the call | the value is rejected, and the violation names the value rather than the predicate that inspected it | Catch `ValidationError`, not the value's own exception. A rejection where vtjson crashes is the one direction this layer does not follow it. |
@@ -91,6 +91,12 @@ undeclared member for laxness to free. A record's named fields and its typed cat
 clauses either way, so neither mode discards them. Nesting follows vtjson too —
 each wrapper builds a validator, and an enclosing wrapper cannot reach inside
 one, so the innermost mode stands.
+
+A schema that contains itself is a recursive schema, as in vtjson: a dict whose
+field holds the dict, or two that reach each other, denote the least set closed
+under their shape. Least means a shape reachable only through infinite nesting
+has no finite member, so a list schema that is its own only element admits
+nothing. Strictness reaches a recursive record like any other.
 
 Strictness reaches the record a combinator carries: `lax(union({"a": int},
 str))` frees the record's undeclared keys, as it does in vtjson, and so do

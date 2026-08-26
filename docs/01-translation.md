@@ -136,6 +136,32 @@ interpreter, and a union is built from the *translated* arguments rather than by
 subscripting `Union`. Both facts are interpreter-shaped; see
 [04-interpreters.md](04-interpreters.md).
 
+## A schema that contains itself
+
+A container already being translated is a **back edge**, not a subtree to
+descend into. valgebra's `recursive` fixpoint supplies the placeholder that
+stands for it, and the set is the *least* fixpoint — so a shape reachable only
+through infinite nesting has no finite member, and `x = [x]` admits nothing.
+
+Cycles are found by trying rather than by scanning. The descent runs as if the
+schema were finite, keeps the containers on the current path, and re-entering
+one raises; the outermost call records that container and starts again. An
+acyclic schema — every schema anyone writes — pays for the path set and nothing
+else. Scanning the whole schema first was measured at around 80% of the
+translation cost, against a few percent for this:
+
+```bash
+uv run python -c "import timeit, vtjson_compat as vg; s={f'f{i}': int for i in range(40)}; print(timeit.timeit(lambda: vg.compile(s), number=300)/300)"
+```
+
+The wrapping itself is free when it is not needed: `recursive` collapses to the
+body when the body never reaches back, so a container that does become a
+fixpoint but holds no back edge translates to the node it would have anyway.
+
+This is not the labelled recursion the ledger records as unsupported. That is
+`set_label` plus validate-time `subs`, a different feature; a dict that simply
+holds itself uses none of it.
+
 ## Arguments are checked when the schema is built
 
 A bound that cannot be compared against, a pattern that will not compile, a

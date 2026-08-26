@@ -8,6 +8,7 @@ meaning is expressed with the algebra so the accept/reject decision matches.
 
 import importlib
 import math
+import threading
 from collections import UserString
 from collections.abc import Callable, Container, Mapping, Sequence
 from collections.abc import Set as AbstractSet
@@ -26,6 +27,9 @@ from ._valgebra_api import (
 )
 from ._valgebra_api import (
     intersect as _intersect,
+)
+from ._valgebra_api import (
+    recursive as _recursive,
 )
 from ._valgebra_api import (
     union as _union,
@@ -284,6 +288,153 @@ def _near(value: float) -> CompiledValidator:
     return _predicate(check)
 
 
+_RECURSION = threading.local()
+
+
+class _CycleError(Exception):
+    """Signal that a container leads back to one already being translated."""
+
+    def __init__(self, target: int) -> None:
+        super().__init__(target)
+        self.target = target
+
+
+class _Recursion:
+    """One thread's translation in progress.
+
+    ``path`` holds the containers currently being descended into, so re-entering
+    one is a cycle. ``targets`` holds the ones found to be cyclic, and ``edges``
+    the placeholder standing for each while its body is built. ``depth`` says
+    whether a translation is already under way, which is what makes the retry
+    happen at the top rather than wherever the cycle was noticed.
+    """
+
+    __slots__ = ("depth", "edges", "path", "targets")
+
+    def __init__(self) -> None:
+        self.depth = 0
+        self.path: set[int] = set()
+        self.targets: frozenset[int] = frozenset()
+        self.edges: dict[tuple[int, bool, bool], CompiledValidator] = {}
+
+
+def _recursion() -> _Recursion:
+    """Return this thread's translation state."""
+    state = getattr(_RECURSION, "state", None)
+    if state is None:
+        state = _RECURSION.state = _Recursion()
+    return state
+
+
+def _translate_container(
+    schema: object,
+    container: Callable[..., CompiledValidator],
+    *,
+    exact: bool,
+    open_records: bool,
+) -> CompiledValidator:
+    """Translate a container, as a fixpoint when it contains itself.
+
+    A cycle costs a retry rather than a scan: the descent runs as if the schema
+    were finite, and re-entering a container raises, naming it. The outermost
+    call records it and starts again, so a schema that does not contain itself
+    pays only for the set of containers on the current path.
+    """
+    state = _recursion()
+    if state.depth:
+        return _descend(
+            state, schema, container, exact=exact, open_records=open_records
+        )
+    try:
+        while True:
+            try:
+                return _descend(
+                    state, schema, container, exact=exact, open_records=open_records
+                )
+            # The retry is the mechanism, not a loop with a cost: an acyclic
+            # schema never raises, and a cyclic one raises once per cycle.
+            except _CycleError as cycle:  # noqa: PERF203
+                if cycle.target in state.targets:
+                    raise  # already a fixpoint, so this is not one it can close
+                state.targets |= {cycle.target}
+                state.path.clear()
+                state.edges.clear()
+    finally:
+        state.targets = frozenset()
+        state.edges.clear()
+        state.path.clear()
+
+
+def _descend(
+    state: _Recursion,
+    schema: object,
+    container: Callable[..., CompiledValidator],
+    *,
+    exact: bool,
+    open_records: bool,
+) -> CompiledValidator:
+    """Translate one container, standing in a back edge for a known cycle.
+
+    The set a cyclic schema denotes is the least fixpoint, so a shape reachable
+    only through infinite nesting has no finite member and admits nothing.
+    """
+    key = id(schema)
+    if key in state.targets:
+        edge = (key, open_records, exact)
+        standing = state.edges.get(edge)
+        if standing is not None:
+            return standing
+
+        def body(placeholder: CompiledValidator) -> CompiledValidator:
+            state.edges[edge] = placeholder
+            state.path.add(key)
+            # The body counts as a descent. Without this the translations inside
+            # it would each look outermost and reset the state this one holds.
+            state.depth += 1
+            try:
+                return container(schema, open_records=open_records)
+            finally:
+                state.depth -= 1
+                state.path.discard(key)
+                del state.edges[edge]
+
+        return _recursive(body)
+    if key in state.path:
+        raise _CycleError(key)
+    state.path.add(key)
+    state.depth += 1
+    try:
+        return container(schema, open_records=open_records)
+    finally:
+        state.depth -= 1
+        state.path.discard(key)
+
+
+def _container_translator(
+    schema: object,
+) -> Callable[..., CompiledValidator] | None:
+    """Return the translator for ``schema``'s container kind, or `None`.
+
+    The builtin literals first, then a container written in any other class —
+    the order vtjson dispatches in, where the builtins carry no demand beyond
+    their kind and any other class narrows the contract to itself.
+    """
+    if isinstance(schema, dict):
+        return _translate_dict
+    if isinstance(schema, list):
+        return _translate_list
+    if isinstance(schema, tuple):
+        return _translate_tuple
+    if isinstance(schema, AbstractSet):
+        return _translate_set
+    kind = _foreign_kind(schema)
+    if kind is None:
+        return None
+    return lambda spec, *, open_records: _foreign_container(
+        spec, kind, open_records=open_records
+    )
+
+
 def _already_a_validator(
     schema: object, *, open_records: bool
 ) -> CompiledValidator | None:
@@ -300,7 +451,7 @@ def _already_a_validator(
     return None
 
 
-def _translate(  # noqa: PLR0911
+def _translate(
     schema: object, *, exact: bool = False, open_records: bool = False
 ) -> CompiledValidator:
     """Translate a vtjson-style schema spec into a valgebra validator.
@@ -328,17 +479,11 @@ def _translate(  # noqa: PLR0911
         # 3.11, so asking that alone reads `dict[str, int]` as a class and hands
         # it to valgebra whole. Having an origin is what tells the two apart.
         return _translate_type(schema, open_records=open_records)
-    if isinstance(schema, dict):
-        return _translate_dict(schema, open_records=open_records)
-    if isinstance(schema, list):
-        return _translate_list(schema, open_records=open_records)
-    if isinstance(schema, tuple):
-        return _translate_tuple(schema, open_records=open_records)
-    if isinstance(schema, AbstractSet):
-        return _translate_set(schema, open_records=open_records)
-    kind = _foreign_kind(schema)
-    if kind is not None:
-        return _foreign_container(schema, kind, open_records=open_records)
+    container = _container_translator(schema)
+    if container is not None:
+        return _translate_container(
+            schema, container, exact=exact, open_records=open_records
+        )
     return _translate_leaf(schema, exact=exact, open_records=open_records)
 
 

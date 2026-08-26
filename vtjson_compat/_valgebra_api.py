@@ -15,6 +15,7 @@ from valgebra import (
     anything,
     complement,
     nothing,
+    recursive,
     union,
 )
 from valgebra import (
@@ -34,6 +35,7 @@ __all__ = [
     "ifthen",
     "intersect",
     "nothing",
+    "recursive",
     "union",
     "validator",
 ]
