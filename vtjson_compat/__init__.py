@@ -40,6 +40,8 @@ spelling — argument names included — for mechanical migration. A call writte
 by keyword against vtjson's documentation runs here unchanged.
 """
 
+from collections.abc import Mapping
+
 from ._constructs import (
     at_least_one_of,
     at_most_one_of,
@@ -173,7 +175,7 @@ def validate(
     obj: object,
     name: str = "object",
     strict: bool = True,  # noqa: FBT001, FBT002
-    subs: dict | None = None,
+    subs: Mapping[str, object] | None = None,
 ) -> None:
     """Validate ``obj`` against a vtjson-style ``schema``.
 

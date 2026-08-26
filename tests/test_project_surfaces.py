@@ -190,3 +190,50 @@ def test_every_valgebra_name_the_layer_takes_is_public() -> None:
     }
     assert taken, "no valgebra names found in the adapter; the check is stale"
     assert taken <= set(valgebra.__all__), sorted(taken - set(valgebra.__all__))
+
+
+# The builtins that are generic: written bare, each says "a container of
+# something" and the something is exactly what a reader needs.
+_GENERIC = frozenset({"dict", "list", "set", "tuple", "frozenset"})
+
+
+def _bare_generics(tree: ast.AST) -> list[str]:
+    """Return every annotation naming a generic without its parameters."""
+    found: list[str] = []
+
+    def visit(node: ast.AST | None) -> None:
+        match node:
+            case ast.Name(id=name) if name in _GENERIC:
+                found.append(f"{name} at line {node.lineno}")
+            case ast.BinOp(left=left, right=right):  # `dict | None`
+                visit(left)
+                visit(right)
+            case _:
+                return
+
+    for node in ast.walk(tree):
+        match node:
+            case ast.FunctionDef(args=args, returns=returns):
+                for argument in [*args.posonlyargs, *args.args, *args.kwonlyargs]:
+                    visit(argument.annotation)
+                visit(args.vararg.annotation if args.vararg else None)
+                visit(args.kwarg.annotation if args.kwarg else None)
+                visit(returns)
+            case ast.AnnAssign(annotation=annotation):
+                visit(annotation)
+    return found
+
+
+def test_no_annotation_names_a_generic_without_its_parameters() -> None:
+    """A container annotation says what it contains.
+
+    `dict` alone carries no more than the name of the call it appears in. The
+    type checker accepts it, so nothing else objects; the reader is the one who
+    pays, and so is the next person who has to guess what belongs in it.
+    """
+    bare = {
+        str(path.relative_to(_ROOT)): found
+        for path in sorted((_ROOT / "vtjson_compat").glob("*.py"))
+        if (found := _bare_generics(ast.parse(path.read_text(encoding="utf-8"))))
+    }
+    assert not bare, f"unparameterised annotations: {bare}"

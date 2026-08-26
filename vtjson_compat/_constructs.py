@@ -322,7 +322,7 @@ def fields(d: Mapping[str, object]) -> CompiledValidator:
     return _predicate(lambda obj: _attributes_match(inner, obj))
 
 
-def _attributes_match(inner: dict, obj: object) -> bool:
+def _attributes_match(inner: Mapping[str, CompiledValidator], obj: object) -> bool:
     for name, validator in inner.items():
         try:
             value = getattr(obj, name)
@@ -350,7 +350,7 @@ def protocol(schema: object, dict: bool = False) -> CompiledValidator:  # noqa: 
     return _predicate(lambda obj: _attributes_match(inner, obj))
 
 
-def _items_match(inner: dict, obj: object) -> bool:
+def _items_match(inner: Mapping[str, CompiledValidator], obj: object) -> bool:
     if not isinstance(obj, _DICT):
         return False
     if any(key not in inner for key in obj):  # strict-closed: no undeclared keys
