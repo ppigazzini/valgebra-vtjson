@@ -86,7 +86,7 @@ narrow margin is that choice, not a limit of the walk.
   path, its best case, to keep the comparison fair.
 - valgebra and vtjson reach the same decision here only for the constructs the
   compatibility layer supports; the differences ledger
-  (`docs/vtjson-conformance.md`) records where valgebra deliberately decides
+  (`03-conformance.md`) records where valgebra deliberately decides
   differently.
 - The comparison is the validation step only. It is not a claim that the two are
   interchangeable for every workflow.

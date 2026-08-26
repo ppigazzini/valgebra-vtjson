@@ -142,7 +142,7 @@ def test_the_construct_decides_as_vtjson_does(
 def test_a_float_constant_stays_a_typed_singleton() -> None:
     """The tolerance widens which floats belong, not which types do.
 
-    `docs/vtjson-conformance.md` records that valgebra reads a constant as a
+    `docs/03-conformance.md` records that valgebra reads a constant as a
     typed singleton, so `1.0` admits no `int`. vtjson admits one, and that
     divergence is deliberate: reading a float as a tolerance must not quietly
     widen it into a cross-type match.

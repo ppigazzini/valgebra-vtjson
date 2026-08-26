@@ -39,12 +39,8 @@ vtjson.validate(schema, {"name": "Ada", "age": 36})  # passes
 ```
 
 The compatibility surface mirrors vtjson's names. See
-[docs/vtjson-conformance.md](docs/vtjson-conformance.md) for the full
+[docs/03-conformance.md](docs/03-conformance.md) for the full
 mapping and the ledger of intentional behavioral differences.
-
-> This layer is a supported, tested way to run existing vtjson schemas on
-> valgebra, for as long as you need it. For *new* schemas, valgebra's native API
-> is usually the more direct expression.
 
 ## Conformance
 
@@ -64,7 +60,7 @@ construct that silently goes unsupported.
 That makes this repo valgebra's real-world proving ground: if the core can carry
 fishtest's schemas with exact parity, it can carry a real codebase's. The
 construct mapping and the full ledger of intentional differences are in
-[docs/vtjson-conformance.md](docs/vtjson-conformance.md).
+[docs/03-conformance.md](docs/03-conformance.md).
 
 ## Performance
 
@@ -74,7 +70,7 @@ decision. On a synthetic benchmark (compile-once on both sides, against the
 LTO+PGO release wheel of valgebra), valgebra is ~14x faster on a 50-field record
 and ~21x–29x faster on nested records, deep nesting, large arrays, and unions.
 Numbers, method, and limits are in
-[docs/performance.md](docs/performance.md).
+[docs/06-performance.md](docs/06-performance.md).
 
 ## Development
 
@@ -83,12 +79,20 @@ Numbers, method, and limits are in
 ```bash
 uv sync
 uv run pytest
-uv run ruff check
+uv run ruff check . && uv run ruff format --check .
 uv run ty check
 ```
 
 The fishtest upstream conformance test fetches its schema at run time (the
 schema is unlicensed and never vendored) and skips when offline.
+
+A change that alters how a schema is classified must also be run on the oldest
+supported interpreter — the typing runtime answers differently across the
+supported range, and a single-interpreter run hides it. See
+[docs/04-interpreters.md](docs/04-interpreters.md).
+
+[docs/](docs/README.md) indexes the documentation set; [AGENTS.md](AGENTS.md) is
+the contract, the gate, and the project rules.
 
 ## License
 

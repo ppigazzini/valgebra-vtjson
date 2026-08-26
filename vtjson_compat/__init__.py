@@ -10,7 +10,7 @@ tolerance rather than identity, so the layer does too.
 
 This package does not import the real ``vtjson`` package; it reimplements the
 relevant surface on top of valgebra. Intentional behavioral differences are
-recorded in the differences ledger (docs/vtjson-conformance.md). Constructs
+recorded in the differences ledger (docs/03-conformance.md). Constructs
 not yet supported raise ``NotImplementedError`` naming the gap.
 
 Layout: ``_translate`` is the schema translator, ``_constructs`` the combinators

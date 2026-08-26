@@ -13,9 +13,9 @@ from pathlib import Path
 
 from benches.bench_vtjson_compare import LABELS, SHAPES
 
-_PAGE = (Path(__file__).resolve().parent.parent / "docs" / "performance.md").read_text(
-    encoding="utf-8"
-)
+_PAGE = (
+    Path(__file__).resolve().parent.parent / "docs" / "06-performance.md"
+).read_text(encoding="utf-8")
 
 
 def test_the_page_reports_every_shape_the_benchmark_measures() -> None:
@@ -44,4 +44,4 @@ def test_every_reported_figure_carries_its_spread() -> None:
 def test_the_page_states_how_the_numbers_were_produced() -> None:
     """A performance claim ships with what produced it."""
     for marker in ("## Method", "bench_vtjson_compare.py", "compile"):
-        assert marker in _PAGE, f"docs/performance.md does not state {marker!r}"
+        assert marker in _PAGE, f"docs/06-performance.md does not state {marker!r}"

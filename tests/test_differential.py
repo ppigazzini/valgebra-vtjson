@@ -261,7 +261,7 @@ CORPUS: list[tuple[str, object, object, list[object]]] = [
 # object, reason). Each row is a place where valgebra deliberately decides
 # differently from vtjson (following the typing spec); every row is asserted to
 # actually diverge (so it cannot rot into silent agreement) and is mirrored in
-# the user-facing ledger (docs/vtjson-conformance.md). Library-level
+# the user-facing ledger (docs/03-conformance.md). Library-level
 # differences that do NOT change the accept/reject decision (the structured
 # error object, single- vs multi-error report, optional deps) stay in that doc
 # only, not here.

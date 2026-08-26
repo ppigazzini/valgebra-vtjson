@@ -43,7 +43,12 @@ _DATED = re.compile(
 
 def _shipped_prose() -> list[Path]:
     """Return every Markdown page the project publishes."""
-    return [*sorted((_ROOT / "docs").glob("*.md")), _ROOT / "README.md"]
+    return [
+        *sorted((_ROOT / "docs").glob("*.md")),
+        _ROOT / "README.md",
+        _ROOT / "AGENTS.md",
+        _ROOT / "CLAUDE.md",
+    ]
 
 
 def _tracked() -> set[str]:
@@ -237,3 +242,76 @@ def test_no_annotation_names_a_generic_without_its_parameters() -> None:
         if (found := _bare_generics(ast.parse(path.read_text(encoding="utf-8"))))
     }
     assert not bare, f"unparameterised annotations: {bare}"
+
+
+def test_only_one_module_imports_valgebra() -> None:
+    """The coupling to valgebra is one file wide.
+
+    `_valgebra_api` names every valgebra symbol the package uses, so a rename
+    upstream is one file's worth of edit here. An import anywhere else spreads
+    the coupling to wherever it was convenient, and the next valgebra release is
+    what finds them.
+    """
+    importers = set()
+    for path in sorted((_ROOT / "vtjson_compat").glob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            match node:
+                case ast.ImportFrom(module=str(module)) if (
+                    module.split(".")[0] == "valgebra"
+                ):
+                    importers.add(path.name)
+                case ast.Import(names=names) if any(
+                    alias.name.split(".")[0] == "valgebra" for alias in names
+                ):
+                    importers.add(path.name)
+
+    assert importers == {"_valgebra_api.py"}, (
+        f"valgebra is imported by {sorted(importers)}; every name must enter "
+        "through _valgebra_api so the coupling stays one file wide"
+    )
+
+
+def test_no_module_reaches_past_the_valgebra_package() -> None:
+    """What the extension module exports is an implementation detail.
+
+    `valgebra.__all__` is the surface valgebra supports; `valgebra._valgebra` is
+    the compiled module underneath it, and importing from there couples this
+    layer to something valgebra is free to reshape.
+    """
+    reaching = set()
+    for path in sorted((_ROOT / "vtjson_compat").glob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            match node:
+                case ast.ImportFrom(module=str(module)) if module.startswith(
+                    "valgebra._"
+                ):
+                    reaching.add(path.name)
+                case ast.Import(names=names) if any(
+                    alias.name.startswith("valgebra._") for alias in names
+                ):
+                    reaching.add(path.name)
+
+    assert not reaching, f"{sorted(reaching)} import from the extension module"
+
+
+def test_the_index_lists_every_page() -> None:
+    """A page missing from its index is a page nobody is sent to."""
+    index = _ROOT / "docs" / "README.md"
+    listed = set(re.findall(r"\(([0-9]{2}-[a-z-]+\.md)\)", index.read_text("utf-8")))
+    present = {p.name for p in (_ROOT / "docs").glob("*.md")} - {"README.md"}
+    assert listed == present, (
+        f"docs/README.md lists {sorted(listed)} but the directory holds "
+        f"{sorted(present)}"
+    )
+
+
+def test_every_page_is_numbered() -> None:
+    """The set is ordered, so a page without a number has no place in it."""
+    unnumbered = sorted(
+        p.name
+        for p in (_ROOT / "docs").glob("*.md")
+        if p.name != "README.md" and not re.fullmatch(r"[0-9]{2}-[a-z-]+\.md", p.name)
+    )
+    assert not unnumbered, f"docs pages without a two-digit number: {unnumbered}"

@@ -4,7 +4,7 @@ Every name on vtjson's public surface is classified exactly once as:
 
 - **supported** — the compatibility layer covers it (it is in ``vtjson_compat``);
 - **ledgered** — a genuine vtjson schema construct deliberately not supported,
-  recorded in ``docs/vtjson-conformance.md`` with a reason;
+  recorded in ``docs/03-conformance.md`` with a reason;
 - **infrastructure** — not a vtjson schema construct at all: a re-exported stdlib
   module, a typing special form or generic alias, a feature flag, a ``TypeVar``,
   or an internal base class / error type.
@@ -206,7 +206,7 @@ def test_supported_constructs_are_importable() -> None:
 
 
 def test_ledgered_constructs_are_recorded_in_the_ledger() -> None:
-    ledger = Path(__file__).resolve().parent.parent / "docs" / "vtjson-conformance.md"
+    ledger = Path(__file__).resolve().parent.parent / "docs" / "03-conformance.md"
     text = ledger.read_text(encoding="utf-8")
     missing = {name for name in _LEDGERED if name not in text}
     assert not missing, f"ledgered constructs absent from the ledger: {sorted(missing)}"
