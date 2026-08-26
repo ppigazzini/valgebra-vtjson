@@ -110,6 +110,21 @@ visible: before 3.11 a subscripted generic answers `isinstance(..., type)`, so
 it admits nothing, and from 3.11 it is called instead and admits everything.
 Both libraries flip together.
 
+A class written as a schema is read by what kind of class it is. A `TypedDict`,
+a `Protocol` and a `NamedTuple` are **structural**: the type hints the class
+declares are checked against the value's items or attributes, and the value's
+own class is never consulted. So two `NamedTuple`s declaring the same field are
+the same schema, a wider value satisfies a narrower schema, and a `NamedTuple`
+schema additionally demands a tuple. `runtime_checkable` does not enter into it
+— it governs `isinstance`, which asks only whether an attribute is present,
+where the schema also enforces its declared type. Every other class — a
+dataclass, an enum, a plain class — is an instance check.
+
+A class that declares no hints constrains nothing, so it admits every value.
+That holds for a bare `collections.namedtuple` used as a schema, which therefore
+admits every tuple, and for `protocol` applied to such a class. Only a class
+carrying no annotations at all is refused, with a `SchemaError`.
+
 A dict key that is not a string is a **clause** when it is a schema and a
 **declared key** when it is a constant: `{int: str}` says nothing about a
 mapping with no int key, and `{1: str}` says the mapping carries a `1`.

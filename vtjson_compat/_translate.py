@@ -12,7 +12,7 @@ from collections import UserString
 from collections.abc import Callable, Container, Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from types import UnionType
-from typing import Annotated, Any, Union, get_args, get_origin
+from typing import Annotated, Any, Union, get_args, get_origin, get_type_hints
 
 from ._valgebra_api import CompiledValidator
 from ._valgebra_api import (
@@ -106,6 +106,50 @@ class _Marker:
 def _refine(marker: _Marker) -> CompiledValidator:
     """Build a validator for ``object`` narrowed by one refinement marker."""
     return _validator(Annotated[object, marker])
+
+
+def _items_match(inner: Mapping[str, CompiledValidator], obj: object) -> bool:
+    """Whether ``obj`` is a dict whose items are exactly ``inner``'s."""
+    if not isinstance(obj, _DICT):
+        return False
+    if any(key not in inner for key in obj):  # strict-closed: no undeclared keys
+        return False
+    return all(
+        key in obj and validator.is_valid(obj[key]) for key, validator in inner.items()
+    )
+
+
+def _attributes_match(inner: Mapping[str, CompiledValidator], obj: object) -> bool:
+    """Whether ``obj`` carries every attribute in ``inner``, each satisfying it."""
+    for name, validator in inner.items():
+        try:
+            value = getattr(obj, name)
+        except Exception:  # noqa: BLE001  (an attribute that cannot be read is absent)
+            return False
+        if not validator.is_valid(value):
+            return False
+    return True
+
+
+def _structural(schema: object, *, as_dict: bool) -> CompiledValidator:
+    """Check ``schema``'s type hints against a value, with no instance check.
+
+    The value's own class is not consulted, so two classes declaring the same
+    hints are the same schema and a wider class satisfies a narrower one. With
+    ``as_dict`` the hints are matched against a mapping's items, otherwise
+    against the value's attributes.
+
+    A class declaring no hints constrains nothing, so the schema it makes admits
+    every value. Refusing that is a divergence: vtjson refuses only a schema it
+    cannot read hints *from*, which is one carrying no annotations at all.
+    """
+    if not hasattr(schema, "__annotations__"):
+        msg = f"the schema {schema!r} does not have type annotations"
+        raise SchemaError(msg)
+    inner = {name: _translate(hint) for name, hint in get_type_hints(schema).items()}
+    if as_dict:
+        return _predicate(lambda obj: _items_match(inner, obj))
+    return _predicate(lambda obj: _attributes_match(inner, obj))
 
 
 def _predicate(check: object) -> CompiledValidator:
@@ -416,9 +460,20 @@ def _translate_type(schema: type, *, open_records: bool = False) -> CompiledVali
         return builder()
     if schema is type(None):
         return _validator(None)
-    # Any other class translates directly: valgebra reads dataclasses, NamedTuples,
-    # Enums, TypedDicts, and runtime Protocols structurally, and a bare class as an
-    # instance check — the isinstance semantics vtjson gives a plain type.
+    if hasattr(schema, "_is_protocol"):
+        # A Protocol names attributes and their types, and vtjson checks both
+        # without an instance check. `runtime_checkable` decides nothing here: it
+        # governs `isinstance`, which only asks whether an attribute is present.
+        return _structural(schema, as_dict=False)
+    if issubclass(schema, tuple) and hasattr(schema, "_fields"):
+        # A NamedTuple is a tuple whose hints describe its attributes, and vtjson
+        # demands both halves and neither class. So a different NamedTuple
+        # declaring the same field belongs, a wider one belongs, and a bare
+        # `namedtuple` — which declares no hints — admits every tuple.
+        return _intersect(_validator(tuple), _structural(schema, as_dict=False))
+    # Any other class is an instance check, which is what vtjson gives a plain
+    # type. valgebra reads a dataclass, an Enum and a TypedDict the same way it
+    # does, so each translates directly.
     built = _validator(schema)
     if open_records:
         # A `TypedDict` declares keys, so laxness frees the ones it does not.

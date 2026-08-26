@@ -10,11 +10,10 @@ cannot handle, mirroring vtjson's reject.
 import math
 from collections.abc import Callable, Mapping
 from types import EllipsisType
-from typing import get_type_hints
 
 from ._translate import (
-    _DICT,
     SchemaError,
+    _attributes_match,
     _bound,
     _integer,
     _Marker,
@@ -22,6 +21,7 @@ from ._translate import (
     _number,
     _predicate,
     _refine,
+    _structural,
     _text,
     _translate,
 )
@@ -325,42 +325,15 @@ def fields(d: Mapping[str, object]) -> CompiledValidator:
     return _predicate(lambda obj: _attributes_match(inner, obj))
 
 
-def _attributes_match(inner: Mapping[str, CompiledValidator], obj: object) -> bool:
-    for name, validator in inner.items():
-        try:
-            value = getattr(obj, name)
-        except Exception:  # noqa: BLE001  (an attribute that cannot be read is absent)
-            return False
-        if not validator.is_valid(value):
-            return False
-    return True
-
-
 def protocol(schema: object, dict: bool = False) -> CompiledValidator:  # noqa: A002, FBT001, FBT002
     """Structurally check the type hints of ``schema`` (a class).
 
     By default the hints are checked against the value's attributes; with
     ``dict=True`` they are checked against a mapping's items. No ``isinstance``
-    check is performed, mirroring vtjson.
+    check is performed, mirroring vtjson — which is also how a `Protocol` and a
+    `NamedTuple` written directly as a schema are read.
     """
-    hints = get_type_hints(schema)
-    if not hints:
-        msg = f"the schema {schema!r} does not have type hints"
-        raise SchemaError(msg)
-    inner = {name: _translate(hint) for name, hint in hints.items()}
-    if dict:
-        return _predicate(lambda obj: _items_match(inner, obj))
-    return _predicate(lambda obj: _attributes_match(inner, obj))
-
-
-def _items_match(inner: Mapping[str, CompiledValidator], obj: object) -> bool:
-    if not isinstance(obj, _DICT):
-        return False
-    if any(key not in inner for key in obj):  # strict-closed: no undeclared keys
-        return False
-    return all(
-        key in obj and validator.is_valid(obj[key]) for key, validator in inner.items()
-    )
+    return _structural(schema, as_dict=dict)
 
 
 def quote(schema: object) -> CompiledValidator:

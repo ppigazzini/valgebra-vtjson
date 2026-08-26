@@ -41,6 +41,32 @@ calling one builds a container from the value rather than judging it:
 
 **A bare callable is a predicate over any value**, which is vtjson's convention.
 
+## A class is read by what kind of class it is
+
+Three kinds are **structural** — the hints the class declares, checked against
+the value, with the value's own class never consulted:
+
+| kind | recognised by | denotes |
+|---|---|---|
+| `TypedDict` | `is_typeddict` | a mapping whose items match the hints |
+| `Protocol` | `_is_protocol` | an object whose attributes match the hints |
+| `NamedTuple` | a `tuple` subclass with `_fields` | a tuple, and those attributes |
+
+Everything else is an instance check, which is what vtjson gives a plain type.
+valgebra reads a dataclass, an enum and a `TypedDict` the same way, so those
+translate directly; the other two need building, because valgebra reads a
+`NamedTuple` as a nominal atom and a `Protocol` by `isinstance`, which asks only
+whether an attribute is present rather than what it holds.
+
+The consequence worth stating plainly: a `NamedTuple` schema is nothing like the
+instance check it resembles. A different `NamedTuple` declaring the same field
+belongs, and so does a wider one.
+
+Hints are read once, when the schema is built. A class declaring none constrains
+nothing and admits every value — including a bare `collections.namedtuple`,
+which admits every tuple. Refusing that would be a divergence, and the refusal
+vtjson does make is narrower: a class carrying no annotations at all.
+
 ## A generic is read by what its origin is
 
 vtjson does not privilege the builtins. A `Mapping` subclass gives a mapping over
