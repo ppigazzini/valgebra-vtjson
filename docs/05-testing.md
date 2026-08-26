@@ -49,6 +49,24 @@ Two things that sweep method taught, both worth keeping:
 - **Choosing the surface is the part no sweep does.** One of these dimensions was
   chosen by a CI failure rather than by anyone's plan.
 
+## A surface is not swept; an axis through it is
+
+The sharper version, and the one that has found the most: a surface swept along
+one axis says nothing about the next axis through it. Classes were swept by what
+they *declare* and came back clean, then produced four defects when swept by
+what *kind* of class they are. Combinators were swept by what they are *given*,
+then produced ten when swept by *strictness*.
+
+So a sweep is recorded with its axis, not just its surface, and each axis that
+has been run lives in a module named after it — construct positions, entry
+points, schema identity, strictness, class kinds, generic origins, interpreters.
+An axis verified once by hand is verified once; an axis with a module is
+verified on every commit and every interpreter in the matrix.
+
+**Write the axis down even when it finds nothing.** A clean axis is the record
+that the question was asked, and the value of that record is what tells the next
+reader which questions have *not* been.
+
 ## The gate
 
 ```bash
