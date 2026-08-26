@@ -24,7 +24,10 @@ else:  # pragma: no cover - only on the oldest supported interpreter
 from pathlib import Path
 
 import pytest
+import valgebra
 import vtjson as vt
+
+from vtjson_compat import _valgebra_api
 
 _ROOT = Path(__file__).resolve().parent.parent
 _CONFIG = tomllib.loads((_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
@@ -156,3 +159,34 @@ def test_the_distribution_carries_a_version_and_a_changelog() -> None:
     """A layer people install is one they can tell the versions of apart."""
     assert _CONFIG["project"]["version"] != "0.0.0", "the version is still the default"
     assert (_ROOT / "CHANGELOG.md").is_file(), "no changelog"
+
+
+def test_the_layer_builds_on_valgebra_s_public_surface() -> None:
+    """Only names `valgebra.__all__` exports are imported.
+
+    `valgebra._valgebra` is the extension module, not the package: what it
+    exports is an implementation detail that can be renamed in a release that
+    promises nothing about it. Everything the layer needs is public, so reaching
+    past the package buys a coupling and nothing else.
+    """
+    # An import, not a mention: naming the module in prose to say why it is
+    # avoided is the point of the docstring that does so.
+    reaches_past = re.compile(r"^\s*(from|import)\s+valgebra\._valgebra\b")
+    private = sorted(
+        f"{path.relative_to(_ROOT)}:{number}"
+        for path in sorted((_ROOT / "vtjson_compat").glob("*.py"))
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
+        if reaches_past.match(line)
+    )
+    assert not private, "imports from the extension module: " + ", ".join(private)
+
+
+def test_every_valgebra_name_the_layer_takes_is_public() -> None:
+    """Guard the guard: the check above is only meaningful if the names exist."""
+    taken = {
+        name
+        for name in dir(_valgebra_api)
+        if not name.startswith("_") and name in dir(valgebra)
+    }
+    assert taken, "no valgebra names found in the adapter; the check is stale"
+    assert taken <= set(valgebra.__all__), sorted(taken - set(valgebra.__all__))

@@ -1,28 +1,26 @@
-"""Internal adapter onto the valgebra extension's current public surface.
+"""The valgebra names the rest of the package uses, under the names it uses.
 
-This compatibility layer was first written against an earlier valgebra extension
-API (``CompiledValidator``, ``validator``, ``intersect``, ``lax``, ``strict``,
-``fixed_sequence``). The shipped valgebra exposes the validator class as
-``Validator`` with a schema-spec constructor, the combinators ``union`` /
-``intersection`` / ``complement`` / ``recursive``, and the constants
-``anything`` / ``nothing``. This module re-expresses the names the rest of the
-package uses in terms of that surface, so the translator and constructs need no
-other change.
+Everything here comes from the ``valgebra`` package, never from the
+``valgebra._valgebra`` extension module underneath it: what that module exports
+is an implementation detail, while ``valgebra.__all__`` is the surface valgebra
+supports. The aliases exist so the translator and the constructs read in vtjson's
+vocabulary — ``intersect`` rather than ``intersection``, a ``validator`` builder
+rather than a class — and nothing else in the package imports valgebra directly.
 """
 
 from typing import Annotated
 
-from valgebra._valgebra import (
+from valgebra import (
     ValidationError,
     anything,
     complement,
     nothing,
     union,
 )
-from valgebra._valgebra import (
+from valgebra import (
     Validator as CompiledValidator,
 )
-from valgebra._valgebra import (
+from valgebra import (
     intersection as intersect,
 )
 
