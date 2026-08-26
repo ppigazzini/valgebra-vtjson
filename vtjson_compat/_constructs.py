@@ -280,11 +280,14 @@ def close_to(
         tolerances["abs_tol"] = abs_tol
 
     def check(obj: object) -> bool:
+        # `math.isclose` reads a `Decimal` or a `Fraction` happily; vtjson counts
+        # neither as a number, so the type test decides before the tolerance does.
+        if not isinstance(obj, int | float):
+            return False
         try:
-            return math.isclose(obj, x, **tolerances)  # ty: ignore[invalid-argument-type]
-        except (TypeError, ValueError):
-            # A non-number, and a tolerance `math.isclose` refuses: neither
-            # makes the value close to `x`.
+            return math.isclose(obj, x, **tolerances)
+        except ValueError:
+            # A tolerance `math.isclose` refuses does not make a value close.
             return False
 
     return _predicate(check)

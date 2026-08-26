@@ -11,6 +11,8 @@ Both columns come from one builder, so a row cannot compare two schemas.
 
 from __future__ import annotations
 
+from decimal import Decimal
+from fractions import Fraction
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -52,6 +54,13 @@ ROWS: list[tuple[str, Callable[[Any], object], list[object]]] = [
     ("quote(float)", lambda m: m.quote(1.5), [1.5, NEAR, FAR]),
     # An int constant is exact in both.
     ("int constant", lambda m: 2, [2, 2.0000000001, 3]),  # noqa: ARG005
+    # `close_to` measures numbers vtjson recognises as such. A `Decimal` or a
+    # `Fraction` compares fine under `math.isclose` and is not one of them.
+    (
+        "close_to(1.0)",
+        lambda m: m.close_to(1.0),
+        [1.0, 1, True, Decimal(1), Fraction(1, 1), complex(1, 0), "1", None],
+    ),
     # A residue outside [0, divisor) is legal in vtjson and means what the
     # subtraction says, not what the modulo of the value says.
     ("div(3, -1)", lambda m: m.div(3, -1), [-1, 2, 5, 0, 1]),
