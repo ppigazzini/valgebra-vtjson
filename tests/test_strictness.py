@@ -205,6 +205,52 @@ def test_laxness_reaches_a_class_that_declares_keys(
     )
 
 
+# A generic alias is rebuilt from translated arguments, so the mode has to
+# travel with them: a record inside one is as lax as a record anywhere else.
+ALIAS_ROWS: list[tuple[str, Callable[[Any], object], list[object]]] = [
+    (
+        "lax of dict[str, TypedDict]",
+        lambda m: m.lax(dict[str, _Row]),
+        [{}, {"a": {"a": 1}}, {"a": {"a": 1, "z": 2}}, {"a": {"a": "x"}}],
+    ),
+    (
+        "strict of dict[str, TypedDict]",
+        lambda m: m.strict(dict[str, _Row]),
+        [{}, {"a": {"a": 1}}, {"a": {"a": 1, "z": 2}}],
+    ),
+    (
+        "lax of list[TypedDict]",
+        lambda m: m.lax(list[_Row]),
+        [[], [{"a": 1}], [{"a": 1, "z": 2}], [{"a": "x"}]],
+    ),
+    (
+        "lax of Optional[TypedDict]",
+        lambda m: m.lax(_Row | None),
+        [None, {"a": 1}, {"a": 1, "z": 2}, {"a": "x"}],
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    ("label", "build", "objects"), ALIAS_ROWS, ids=[r[0] for r in ALIAS_ROWS]
+)
+def test_strictness_travels_into_a_generic_alias(
+    label: str,
+    build: Callable[[Any], object],
+    objects: list[object],
+) -> None:
+    """A record inside a subscripted generic is as lax as a record anywhere."""
+    reference, layer = build(vt), build(vg)
+    divergences = [
+        (obj, _decide(vt, reference, obj), _decide(vg, layer, obj))
+        for obj in objects
+        if _decide(vt, reference, obj) != _decide(vg, layer, obj)
+    ]
+    assert not divergences, f"{label}: " + ", ".join(
+        f"{obj!r} vtjson={a} layer={b}" for obj, a, b in divergences
+    )
+
+
 # Every tower of wrappers, against a record nested one deep with an undeclared
 # key at the bottom.
 TOWERS: list[tuple[str, Callable[[Any], object]]] = [

@@ -11,6 +11,7 @@ import math
 from collections import UserString
 from collections.abc import Callable, Mapping, Sequence
 from collections.abc import Set as AbstractSet
+from types import UnionType
 from typing import Annotated, Union, get_args, get_origin
 
 from ._valgebra_api import CompiledValidator
@@ -206,10 +207,12 @@ def _translate(  # noqa: PLR0911
         return _foreign_container(schema, dict, open_records=open_records)
     if isinstance(schema, Sequence) and not isinstance(schema, _TEXT):
         return _foreign_container(schema, list, open_records=open_records)
-    return _translate_leaf(schema, exact=exact)
+    return _translate_leaf(schema, exact=exact, open_records=open_records)
 
 
-def _translate_leaf(schema: object, *, exact: bool) -> CompiledValidator:
+def _translate_leaf(
+    schema: object, *, exact: bool, open_records: bool
+) -> CompiledValidator:
     """Translate a leaf schema.
 
     A typing form, a predicate, or a constant — anything that is not a container.
@@ -221,15 +224,27 @@ def _translate_leaf(schema: object, *, exact: bool) -> CompiledValidator:
         # value. Handing the whole form to valgebra instead reads the metadata by
         # its own marker protocol, and a construct is not one of those markers —
         # so the constraint would be dropped rather than applied.
-        base = _translate(schema.__origin__, exact=exact)  # ty: ignore[unresolved-attribute]
-        return _intersect(base, *(_translate(item, exact=exact) for item in metadata))
+        base = _translate(
+            schema.__origin__,  # ty: ignore[unresolved-attribute]
+            exact=exact,
+            open_records=open_records,
+        )
+        return _intersect(
+            base,
+            *(
+                _translate(item, exact=exact, open_records=open_records)
+                for item in metadata
+            ),
+        )
     origin = get_origin(schema)
     if origin is not None:
         # A subscripted generic — `list[int]`, `Literal["a", "b"]`, `int | str` —
         # is a schema valgebra reads directly. Several are also callable, and
         # calling one builds a container from the value rather than judging it:
         # `list[int]("a")` is `["a"]`, which a predicate reads as a pass.
-        return _validator(_translated_alias(schema, origin, exact=exact))
+        return _validator(
+            _translated_alias(schema, origin, exact=exact, open_records=open_records)
+        )
     if callable(schema):
         if getattr(schema, "_vtjson_nullary", False):
             # A bare nullary construct, like vtjson's auto-instantiated bare class.
@@ -243,11 +258,15 @@ def _translate_leaf(schema: object, *, exact: bool) -> CompiledValidator:
 
 
 # The generics whose arguments are schemas. `Literal`'s are values, and a form
-# not listed here is handed to valgebra whole rather than taken apart.
-_PARAMETERISED = (list, set, frozenset, tuple, dict, Union)
+# not listed here is handed to valgebra whole rather than taken apart. Both
+# spellings of a union are listed: before 3.14 `X | Y` and `Union[X, Y]` report
+# different origins.
+_PARAMETERISED = (list, set, frozenset, tuple, dict, Union, UnionType)
 
 
-def _translated_alias(schema: object, origin: object, *, exact: bool) -> object:
+def _translated_alias(
+    schema: object, origin: object, *, exact: bool, open_records: bool
+) -> object:
     """Rebuild a subscripted generic with each argument translated.
 
     Handing the form to valgebra whole would read its arguments by valgebra's own
@@ -258,10 +277,12 @@ def _translated_alias(schema: object, origin: object, *, exact: bool) -> object:
     if origin not in _PARAMETERISED:
         return schema
     arguments = tuple(
-        item if item is Ellipsis else _translate(item, exact=exact)
+        item
+        if item is Ellipsis
+        else _translate(item, exact=exact, open_records=open_records)
         for item in get_args(schema)
     )
-    if origin is Union:
+    if origin in (Union, UnionType):
         # Built as a union of the translated arguments rather than by
         # subscripting `Union`, which before 3.11 admits only types and a
         # translated argument is a validator.
