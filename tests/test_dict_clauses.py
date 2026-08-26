@@ -131,6 +131,24 @@ KEY_KINDS: list[tuple[str, Callable[[Any], object], list[object]]] = [
         lambda m: {1: str, str: int},  # noqa: ARG005
         [{}, {1: "x"}, {1: "x", "b": 2}, {1: "x", "b": "z"}],
     ),
+    # A construct written as a key is a schema, so it claims the keys it
+    # matches. Reading it as a constant instead would declare a key the mapping
+    # must carry, and the empty mapping would stop belonging.
+    (
+        "construct key",
+        lambda m: {m.union(str, int): int},
+        [{}, {"a": 1}, {1: 1}, {"a": "x"}],
+    ),
+    (
+        "regex key",
+        lambda m: {m.regex("[a-z]+"): int},
+        [{}, {"ab": 1}, {"AB": 1}, {"ab": "x"}],
+    ),
+    (
+        "construct key beside a named field",
+        lambda m: {"a": int, m.union(str, int): str},
+        [{}, {"a": 1}, {"a": 1, "b": "x"}, {"a": 1, "b": 2}],
+    ),
 ]
 
 

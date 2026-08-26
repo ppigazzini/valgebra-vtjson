@@ -108,11 +108,61 @@ def _refine(marker: _Marker) -> CompiledValidator:
     return _validator(Annotated[object, marker])
 
 
-def _items_match(inner: Mapping[str, CompiledValidator], obj: object) -> bool:
-    """Whether ``obj`` is a dict whose items are exactly ``inner``'s."""
+class _Deferred:
+    """A construct holding what it needs to translate, but not the mode.
+
+    vtjson threads strictness as a call-time flag, so a combinator sitting
+    between a wrapper and a record does not stop it: `lax(union({"a": int},
+    str))` reaches the record. A construct that translated its arguments when it
+    was called would have settled a mode already, and the enclosing wrapper
+    would have nothing left to reach.
+
+    Only `lax` and `strict` settle it, which is why they return a built
+    validator and this does not.
+
+    Every validator attribute is served from a strict build, so a construct used
+    on its own is a validator like any other.
+    """
+
+    __slots__ = ("_build", "_settled")
+
+    def __init__(self, build: Callable[..., CompiledValidator]) -> None:
+        self._build = build
+        self._settled: CompiledValidator | None = None
+
+    def _under(self, *, open_records: bool) -> CompiledValidator:
+        """Return the validator this construct denotes under ``open_records``."""
+        return self._build(open_records=open_records)
+
+    def __getattr__(self, name: str) -> object:
+        if self._settled is None:
+            self._settled = self._build(open_records=False)
+        return getattr(self._settled, name)
+
+    def __repr__(self) -> str:
+        return repr(self._under(open_records=False))
+
+
+def _deferred(build: Callable[..., CompiledValidator]) -> CompiledValidator:
+    """Return a construct that waits for a strictness mode before translating.
+
+    Typed as the validator it stands in for: `_Deferred` serves every validator
+    attribute from a strict build, and no static type says so.
+    """
+    return _Deferred(build)  # ty: ignore[invalid-return-type]
+
+
+def _items_match(
+    inner: Mapping[str, CompiledValidator], obj: object, *, open_records: bool
+) -> bool:
+    """Whether ``obj`` is a dict whose items satisfy ``inner``.
+
+    A key ``inner`` does not name is undeclared, so laxness frees it and
+    strictness refuses it — the same rule a record follows.
+    """
     if not isinstance(obj, _DICT):
         return False
-    if any(key not in inner for key in obj):  # strict-closed: no undeclared keys
+    if not open_records and any(key not in inner for key in obj):
         return False
     return all(
         key in obj and validator.is_valid(obj[key]) for key, validator in inner.items()
@@ -131,7 +181,21 @@ def _attributes_match(inner: Mapping[str, CompiledValidator], obj: object) -> bo
     return True
 
 
-def _structural(schema: object, *, as_dict: bool) -> CompiledValidator:
+def _annotated(schema: object) -> None:
+    """Refuse a schema no type hints can be read from.
+
+    vtjson asks only whether the class carries ``__annotations__`` at all, and
+    asks it when the schema is built. A class carrying an empty one is a
+    prototype that constrains nothing, not a malformed schema.
+    """
+    if not hasattr(schema, "__annotations__"):
+        msg = f"the schema {schema!r} does not have type annotations"
+        raise SchemaError(msg)
+
+
+def _structural(
+    schema: object, *, as_dict: bool, open_records: bool = False
+) -> CompiledValidator:
     """Check ``schema``'s type hints against a value, with no instance check.
 
     The value's own class is not consulted, so two classes declaring the same
@@ -143,12 +207,16 @@ def _structural(schema: object, *, as_dict: bool) -> CompiledValidator:
     every value. Refusing that is a divergence: vtjson refuses only a schema it
     cannot read hints *from*, which is one carrying no annotations at all.
     """
-    if not hasattr(schema, "__annotations__"):
-        msg = f"the schema {schema!r} does not have type annotations"
-        raise SchemaError(msg)
-    inner = {name: _translate(hint) for name, hint in get_type_hints(schema).items()}
+    _annotated(schema)
+    inner = {
+        name: _translate(hint, open_records=open_records)
+        for name, hint in get_type_hints(schema).items()
+    }
     if as_dict:
-        return _predicate(lambda obj: _items_match(inner, obj))
+        return _predicate(
+            lambda obj: _items_match(inner, obj, open_records=open_records)
+        )
+    # An attribute schema declares no key, so laxness has nothing to free here.
     return _predicate(lambda obj: _attributes_match(inner, obj))
 
 
@@ -216,6 +284,22 @@ def _near(value: float) -> CompiledValidator:
     return _predicate(check)
 
 
+def _already_a_validator(
+    schema: object, *, open_records: bool
+) -> CompiledValidator | None:
+    """Return the validator ``schema`` already is, or `None` if it is a spec.
+
+    A built validator carries the mode it was built with, which is what makes
+    the innermost `lax` or `strict` the one that decides. A construct carries
+    everything *but* the mode, so this is where it is given one.
+    """
+    if isinstance(schema, _Deferred):
+        return schema._under(open_records=open_records)  # noqa: SLF001
+    if isinstance(schema, CompiledValidator):
+        return schema
+    return None
+
+
 def _translate(  # noqa: PLR0911
     schema: object, *, exact: bool = False, open_records: bool = False
 ) -> CompiledValidator:
@@ -230,8 +314,9 @@ def _translate(  # noqa: PLR0911
     unchanged, so a wrapper cannot reach inside one and the innermost mode
     stands, as it does in vtjson.
     """
-    if isinstance(schema, CompiledValidator):
-        return schema
+    already = _already_a_validator(schema, open_records=open_records)
+    if already is not None:
+        return already
     if schema is None:
         return _validator(None)
     if schema is Any:
@@ -464,13 +549,16 @@ def _translate_type(schema: type, *, open_records: bool = False) -> CompiledVali
         # A Protocol names attributes and their types, and vtjson checks both
         # without an instance check. `runtime_checkable` decides nothing here: it
         # governs `isinstance`, which only asks whether an attribute is present.
-        return _structural(schema, as_dict=False)
+        return _structural(schema, as_dict=False, open_records=open_records)
     if issubclass(schema, tuple) and hasattr(schema, "_fields"):
         # A NamedTuple is a tuple whose hints describe its attributes, and vtjson
         # demands both halves and neither class. So a different NamedTuple
         # declaring the same field belongs, a wider one belongs, and a bare
         # `namedtuple` — which declares no hints — admits every tuple.
-        return _intersect(_validator(tuple), _structural(schema, as_dict=False))
+        return _intersect(
+            _validator(tuple),
+            _structural(schema, as_dict=False, open_records=open_records),
+        )
     # Any other class is an instance check, which is what vtjson gives a plain
     # type. valgebra reads a dataclass, an Enum and a TypedDict the same way it
     # does, so each translates directly.
@@ -633,9 +721,9 @@ def _is_key_schema(key: object) -> bool:
     as a key the value must carry. `{int: str}` says nothing about a mapping
     with no int key; `{1: str}` says the mapping has a `1`.
     """
-    return isinstance(key, type | CompiledValidator | tuple | frozenset) or callable(
-        key
-    )
+    return isinstance(
+        key, type | CompiledValidator | _Deferred | tuple | frozenset
+    ) or callable(key)
 
 
 def _carries(keys: tuple[object, ...]) -> CompiledValidator:

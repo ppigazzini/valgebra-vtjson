@@ -13,8 +13,10 @@ from types import EllipsisType
 
 from ._translate import (
     SchemaError,
+    _annotated,
     _attributes_match,
     _bound,
+    _deferred,
     _integer,
     _Marker,
     _nullary,
@@ -117,17 +119,29 @@ def size(lb: int, ub: int | EllipsisType | None = None) -> CompiledValidator:
 
 def union(*schemas: object) -> CompiledValidator:
     """Return the union of the given schemas (a value matching any of them)."""
-    return _union(*(_translate(s) for s in schemas))
+    return _deferred(
+        lambda *, open_records: _union(
+            *(_translate(s, open_records=open_records) for s in schemas)
+        )
+    )
 
 
 def intersect(*schemas: object) -> CompiledValidator:
     """Return the intersection of the given schemas (matching all of them)."""
-    return _intersect(*(_translate(s) for s in schemas))
+    return _deferred(
+        lambda *, open_records: _intersect(
+            *(_translate(s, open_records=open_records) for s in schemas)
+        )
+    )
 
 
 def complement(schema: object) -> CompiledValidator:
     """Return the complement of the given schema (a value not matching it)."""
-    return _complement(_translate(schema))
+    return _deferred(
+        lambda *, open_records: _complement(
+            _translate(schema, open_records=open_records)
+        )
+    )
 
 
 def ifthen(
@@ -143,8 +157,12 @@ def ifthen(
     """
     if else_schema is None:
         else_schema = anything
-    return _derived_ifthen(
-        _translate(if_schema), _translate(then_schema), _translate(else_schema)
+    return _deferred(
+        lambda *, open_records: _derived_ifthen(
+            _translate(if_schema, open_records=open_records),
+            _translate(then_schema, open_records=open_records),
+            _translate(else_schema, open_records=open_records),
+        )
     )
 
 
@@ -158,8 +176,17 @@ def cond(*args: tuple[object, object]) -> CompiledValidator:
         if not isinstance(case, tuple) or len(case) != 2:  # noqa: PLR2004
             msg = f"the case {case!r} is not a tuple of length two"
             raise SchemaError(msg)
-    translated = [(_translate(c), _translate(t)) for c, t in args]
-    return _derived_cond(*translated)
+    return _deferred(
+        lambda *, open_records: _derived_cond(
+            *(
+                (
+                    _translate(condition, open_records=open_records),
+                    _translate(then, open_records=open_records),
+                )
+                for condition, then in args
+            )
+        )
+    )
 
 
 @_nullary
@@ -303,15 +330,19 @@ def filter(  # noqa: A001  (mirrors vtjson's public name)
     if not callable(filter):
         msg = "the filter is not callable"
         raise SchemaError(msg)
-    inner = _translate(schema)
 
-    def check(obj: object) -> bool:
-        try:
-            return inner.is_valid(filter(obj))  # ty: ignore[call-top-callable]
-        except Exception:  # noqa: BLE001  (any transform error means non-member)
-            return False
+    def build(*, open_records: bool) -> CompiledValidator:
+        inner = _translate(schema, open_records=open_records)
 
-    return _predicate(check)
+        def check(obj: object) -> bool:
+            try:
+                return inner.is_valid(filter(obj))  # ty: ignore[call-top-callable]
+            except Exception:  # noqa: BLE001  (a transform error means non-member)
+                return False
+
+        return _predicate(check)
+
+    return _deferred(build)
 
 
 def fields(d: Mapping[str, object]) -> CompiledValidator:
@@ -319,10 +350,18 @@ def fields(d: Mapping[str, object]) -> CompiledValidator:
     if not isinstance(d, Mapping):
         msg = f"the attributes {d!r} are not a Mapping"
         raise SchemaError(msg)
-    inner = {
-        _text(name, "attribute name"): _translate(schema) for name, schema in d.items()
-    }
-    return _predicate(lambda obj: _attributes_match(inner, obj))
+    names = [_text(name, "attribute name") for name in d]
+    return _deferred(
+        lambda *, open_records: _predicate(
+            lambda obj: _attributes_match(
+                {
+                    name: _translate(schema, open_records=open_records)
+                    for name, schema in zip(names, d.values(), strict=True)
+                },
+                obj,
+            )
+        )
+    )
 
 
 def protocol(schema: object, dict: bool = False) -> CompiledValidator:  # noqa: A002, FBT001, FBT002
@@ -333,7 +372,15 @@ def protocol(schema: object, dict: bool = False) -> CompiledValidator:  # noqa: 
     check is performed, mirroring vtjson — which is also how a `Protocol` and a
     `NamedTuple` written directly as a schema are read.
     """
-    return _structural(schema, as_dict=dict)
+    # The gate is asked here rather than inside the deferred build: vtjson
+    # refuses this schema when it is written, and a construct that refuses its
+    # arguments only once a value arrives is not a construction-time check.
+    _annotated(schema)
+    return _deferred(
+        lambda *, open_records: _structural(
+            schema, as_dict=dict, open_records=open_records
+        )
+    )
 
 
 def quote(schema: object) -> CompiledValidator:
@@ -345,7 +392,9 @@ def set_name(schema: object, name: str, reason: bool = False) -> CompiledValidat
     """Accept vtjson's ``set_name``; the name is cosmetic, so it is ignored."""
     _text(name, "name")
     del name, reason
-    return _translate(schema)
+    return _deferred(
+        lambda *, open_records: _translate(schema, open_records=open_records)
+    )
 
 
 def set_label(schema: object, *labels: str, debug: bool = False) -> CompiledValidator:
@@ -353,6 +402,11 @@ def set_label(schema: object, *labels: str, debug: bool = False) -> CompiledVali
 
     Labels matter only with validate-time ``subs`` substitution, which is not
     supported — use the ``recursive`` fixpoint for recursion instead.
+
+    Strictness stops here. vtjson validates the labelled schema strictly whatever
+    the ambient flag says, so an enclosing ``lax`` does not reach the record
+    inside, and neither does ``validate(strict=False)``. Deferring would let it
+    through, which is why this settles the mode rather than carrying it.
     """
     for label in labels:
         _text(label, "label")

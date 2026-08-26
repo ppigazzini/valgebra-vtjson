@@ -102,6 +102,33 @@ translating a built validator yields it unchanged. So an enclosing wrapper canno
 reach inside one and the innermost mode stands — which is what vtjson's call-time
 flag arrives at by another route.
 
+### A combinator is not a wrapper
+
+That mechanism settles strictness the moment a validator exists, so anything
+that builds one eagerly becomes a barrier. Only `lax` and `strict` may be: a
+`union`, an `ifthen`, a `set_name` sits *between* a wrapper and a record, and
+vtjson's flag goes straight through it.
+
+So a construct carrying a schema does not translate it when it is called. It
+returns a `_Deferred` — everything it needs except the mode — and `_translate`
+supplies the mode when one is known. A construct used on its own still answers
+as a validator, from a strict build.
+
+Two things stay eager, and for different reasons:
+
+- **Argument checks.** A construct refuses malformed arguments when the schema
+  is written, not when a value arrives. Deferring the whole body would move a
+  `SchemaError` off the construction path, which is the guarantee the check
+  exists for.
+- **`set_label`.** vtjson validates a labelled schema strictly whatever the
+  ambient flag says, so an enclosing `lax` does not reach the record inside and
+  neither does `validate(strict=False)`. It settles the mode rather than
+  carrying it.
+
+A `_Deferred` is also a schema when it appears as a *dict key*, where the
+question is whether a key constrains other keys or is one. It constrains, the
+same as any other construct written there.
+
 ## Both spellings of a union
 
 `X | Y` and `Union[X, Y]` do not report the same origin on every supported

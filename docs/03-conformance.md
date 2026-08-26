@@ -92,6 +92,13 @@ clauses either way, so neither mode discards them. Nesting follows vtjson too â€
 each wrapper builds a validator, and an enclosing wrapper cannot reach inside
 one, so the innermost mode stands.
 
+Strictness reaches the record a combinator carries: `lax(union({"a": int},
+str))` frees the record's undeclared keys, as it does in vtjson, and so do
+`intersect`, `ifthen`, `cond`, `complement`, `filter`, `set_name` and `protocol`.
+`set_label` is the exception, and it is vtjson's: a labelled schema is validated
+strictly whatever the ambient flag says, so neither an enclosing `lax` nor
+`validate(strict=False)` reaches inside it.
+
 `Annotated[T, *rest]` is `T` and every one of `rest`, each read as a schema in
 its own right, as vtjson reads it â€” so a construct written in the metadata
 constrains the value rather than decorating it, including inside a subscripted
