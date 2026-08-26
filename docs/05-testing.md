@@ -86,7 +86,8 @@ uv run ty check
   executed, not about schema forms enumerated. Every defect this layer has had
   was in code the suite already executed.
 - **A behaviour that differs only on an interpreter the local run skips.** See
-  [04-interpreters.md](04-interpreters.md).
+  [04-interpreters.md](04-interpreters.md) — including the *build*, since a
+  version and a build are not the same interpreter.
 
 ## The inventory, so the surface cannot drift
 

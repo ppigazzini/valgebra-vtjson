@@ -21,9 +21,14 @@ jobs:
     strategy:
       # Every interpreter the classifiers claim. A version promised in the
       # metadata and absent from this list is a promise nothing keeps.
+      #
+      # `3.14t` is the free-threaded build of a version already listed. It is
+      # here as a build rather than a version: the translator keeps per-thread
+      # state while it descends a schema, and under a GIL that state is held
+      # still by the interpreter rather than by anything this project does.
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14", "3.14t"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1

@@ -126,20 +126,49 @@ def test_a_schema_written_twice_is_not_a_cycle(
     )
 
 
-def test_the_same_shapes_translate_correctly_on_many_threads() -> None:
-    """The descent's state is per thread, so threads do not share a path."""
-    workers = 16
+# One of each shared thing, so the threads contend over the same objects rather
+# than each building its own: a recursive schema, a construct that has not been
+# built yet, and a plain record.
+_SHARED_NODE: dict[object, object] = {}
+_SHARED_NODE.update({"v": int, "kids": [_SHARED_NODE, ...]})
+_SHARED_RECORD = {"a": int}
+
+
+def test_threads_translating_the_same_objects_reach_one_verdict() -> None:
+    """The descent's state is per thread, so threads do not share a path.
+
+    Contended on purpose. Under a GIL the interpreter holds that state still
+    whatever this package does; the free-threaded lane is where it has to hold
+    itself still, so the threads here hammer one recursive schema, one record and
+    one construct rather than each taking a copy.
+    """
+    workers, rounds = 16, 40
+    construct = vg.union({"a": int}, str)
     outcomes: list[str] = ["not started"] * workers
+    seen: list[set[str]] = [set() for _ in range(4)]
+    guard = threading.Lock()
+
+    def decide(schema: object, obj: object) -> str:
+        try:
+            vg.validate(schema, obj)
+        except vg.ValidationError:
+            return "reject"
+        return "accept"
 
     def run(index: int) -> None:
         try:
-            node: dict[object, object] = {}
-            node.update({"v": int, "kids": [node, ...]})
-            vg.validate(node, {"v": 1, "kids": [{"v": 2, "kids": []}]})
-
-            record = {"a": int}
-            vg.validate({"x": record, "y": record}, {"x": {"a": 1}, "y": {"a": 1}})
-            vg.validate(vg.lax(record), {"a": 1, "z": 2})
+            for _ in range(rounds):
+                verdicts = (
+                    decide(_SHARED_NODE, {"v": 1, "kids": [{"v": 2, "kids": []}]}),
+                    decide(_SHARED_NODE, {"v": "x", "kids": []}),
+                    decide({"x": construct}, {"x": {"a": 1, "e": 2}}),
+                    decide(vg.lax(_SHARED_RECORD), {"a": 1, "z": 2}),
+                )
+                with guard:
+                    for slot, verdict in enumerate(verdicts):
+                        seen[slot].add(verdict)
+                # Force the construct's own build from every thread at once.
+                repr(construct)
             outcomes[index] = "ok"
         except Exception as exc:  # noqa: BLE001  (the report is the assertion)
             outcomes[index] = f"{type(exc).__name__}: {exc}"
@@ -151,3 +180,8 @@ def test_the_same_shapes_translate_correctly_on_many_threads() -> None:
         thread.join()
 
     assert set(outcomes) == {"ok"}, f"threads reported {sorted(set(outcomes))}"
+    unstable = [slot for slot, verdicts in enumerate(seen) if len(verdicts) != 1]
+    assert not unstable, (
+        f"schemas {unstable} reached more than one verdict across threads: "
+        f"{[sorted(seen[slot]) for slot in unstable]}"
+    )

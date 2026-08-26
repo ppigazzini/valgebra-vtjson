@@ -24,13 +24,26 @@ LTO+PGO build the release workflow produces, so installing valgebra from the
 index is enough; an editable `uv sync` against a `../valgebra` checkout produces
 a debug build and understates valgebra by several times.
 
-The interpreter is part of what is measured. A free-threaded build runs
-single-threaded work slower, and by different factors for the two libraries, so
-the figures below are from a standard GIL build and a comparison across builds
-is not one:
+The interpreter is part of what is measured, and its **build** is part of the
+interpreter. A free-threaded build runs single-threaded work slower, and by
+different factors for the two libraries, so the figures below are from a
+standard GIL build and a comparison across builds is not one.
+
+`--python 3.14` does not settle that. It resolves to whichever 3.14 is
+installed, which on a machine carrying a free-threaded one is that — so confirm
+the build rather than assuming it:
 
 ```bash
 uv venv /tmp/bench --python 3.14
+/tmp/bench/bin/python -c "import sysconfig; print(sysconfig.get_config_var('Py_GIL_DISABLED'))"
+```
+
+`0` is a GIL build and is what these figures were measured on; `1` is
+free-threaded, and the numbers below do not describe it. Name an exact
+interpreter — `--python cpython-3.14.7` — if the default resolves to the wrong
+one.
+
+```bash
 VIRTUAL_ENV=/tmp/bench uv pip install "valgebra==0.0.8" "vtjson==2.3.0" \
   pytest pytest-benchmark
 VIRTUAL_ENV=/tmp/bench uv pip install -e . --no-deps

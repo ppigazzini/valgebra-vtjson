@@ -1,9 +1,10 @@
 """The performance page is held to the benchmark that produces it.
 
-A ratio in prose is a claim about a measurement someone else has to trust. Two
+A ratio in prose is a claim about a measurement someone else has to trust. Three
 things make it checkable: the families the page reports are the shapes the
-benchmark defines, and every figure carries the spread it was measured with —
-a bare number reads the same whether it was stable or noise.
+benchmark defines, every figure carries the spread it was measured with — a bare
+number reads the same whether it was stable or noise — and the conditions the
+page names are ones its own command can be confirmed to have met.
 """
 
 from __future__ import annotations
@@ -45,3 +46,18 @@ def test_the_page_states_how_the_numbers_were_produced() -> None:
     """A performance claim ships with what produced it."""
     for marker in ("## Method", "bench_vtjson_compare.py", "compile"):
         assert marker in _PAGE, f"docs/06-performance.md does not state {marker!r}"
+
+
+def test_the_page_says_how_to_confirm_the_interpreter_build() -> None:
+    """A condition the method cannot be checked against is not a method.
+
+    The page reports figures from a GIL build and says so, because a
+    free-threaded interpreter runs this work slower and by different factors for
+    the two libraries. But `--python 3.14` resolves to whichever 3.14 is
+    installed, which on a machine carrying a free-threaded one is that — so the
+    command alone does not establish the condition the page claims.
+    """
+    assert "Py_GIL_DISABLED" in _PAGE, (
+        "docs/06-performance.md reports a GIL build but gives no way to confirm "
+        "one: `--python 3.14` resolves to whatever 3.14 is installed"
+    )

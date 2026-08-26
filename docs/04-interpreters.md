@@ -61,6 +61,25 @@ uv sync --locked --python 3.14 && uv run --no-sync pytest
 Check the two owners named at the top rather than trusting that pair to still be
 the ends.
 
+## The build is part of the interpreter
+
+A version is not an interpreter. 3.13 and 3.14 each ship a free-threaded build
+as well as a standard one, and they are different runtimes: the translator keeps
+per-thread state while it descends a schema, and under a GIL that state is held
+still by the interpreter rather than by anything here.
+
+`.github/workflows/ci.yml` runs a free-threaded lane for that reason. Locally,
+`--python 3.14` resolves to whichever 3.14 is installed rather than to a build
+you chose, so ask before assuming:
+
+```bash
+python -c "import sysconfig; print(sysconfig.get_config_var('Py_GIL_DISABLED'))"
+```
+
+`0` is a GIL build, `1` is free-threaded. It matters for measurement as well as
+for correctness — see [06-performance.md](06-performance.md), whose figures are
+a GIL build's.
+
 ## The limit
 
 The ends are not a proof about the middle. They catch the common case, where a
