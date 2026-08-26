@@ -300,7 +300,10 @@ def _translate_dict(
     schema: dict[object, object], *, open_records: bool = False
 ) -> CompiledValidator:
     if not schema:
-        return _of_own_class(schema, _validator({}))
+        # No clause at all: strictly, only the empty dict has no unclaimed key;
+        # laxly, every key is unclaimed and so every dict belongs.
+        empty = {_complement(_union()): _validator(_anything)} if open_records else {}
+        return _of_own_class(schema, _validator(empty))
     # A string key is a record field (a trailing "?" marks it optional); any
     # other key is a schema constraining the rest. valgebra's native dict form
     # combines both — named fields plus one or more key-pattern catch-all clauses

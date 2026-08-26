@@ -45,7 +45,14 @@ MIXED: list[object] = [
 # A plain record, where strictness is the whole question.
 PLAIN: list[object] = [{"a": 1}, {"a": "x"}, {"a": 1, "b": 2}, {"b": 2}]
 
+# An empty dict declares no clause at all, so under laxness every key is
+# unclaimed and every dict belongs.
+EMPTY_PROBES: list[object] = [{}, {"a": 1}, {1: "y"}, {"a": 1, "b": 2}]
+
 ROWS: list[tuple[str, Callable[[Any], object], list[object]]] = [
+    ("lax of an empty dict", lambda m: m.lax({}), EMPTY_PROBES),
+    ("strict of an empty dict", lambda m: m.strict({}), EMPTY_PROBES),
+    ("an empty dict as written", lambda m: {}, EMPTY_PROBES),  # noqa: ARG005
     ("lax of a mixed dict", lambda m: m.lax({"name": str, str: int}), MIXED),
     ("strict of a mixed dict", lambda m: m.strict({"name": str, str: int}), MIXED),
     ("a mixed dict as written", lambda m: {"name": str, str: int}, MIXED),  # noqa: ARG005
