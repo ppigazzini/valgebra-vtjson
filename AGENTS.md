@@ -68,7 +68,15 @@ uv sync --locked --python 3.14 && uv run --no-sync pytest
 Those two are the ends of the range. `requires-python` in `pyproject.toml` owns
 the floor and `.github/workflows/ci.yml` owns the interpreters CI runs between
 them; check both rather than trusting the pair above to still be the ends.
-[docs/04-interpreters.md](docs/04-interpreters.md) says why it matters.
+
+The *build* counts too. `--python 3.14` resolves to whichever 3.14 is installed,
+so a change touching per-thread state wants a free-threaded run as well:
+
+```bash
+python -c "import sysconfig; print(sysconfig.get_config_var('Py_GIL_DISABLED'))"
+```
+
+[docs/04-interpreters.md](docs/04-interpreters.md) says why both matter.
 
 
 ## Layout

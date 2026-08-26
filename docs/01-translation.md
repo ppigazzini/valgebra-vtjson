@@ -10,9 +10,10 @@ function and the helpers it calls.
 not arbitrary — it mirrors vtjson's own dispatch, and swapping two arms changes
 what a schema means.
 
-The arms, in order: an already-built validator returns itself; `None`; `Any`; a
-class; the four builtin container literals (`dict`, `list`, `tuple`, set); a
-container written in some other class; anything else, which is a leaf.
+The arms, in order: a schema that is already a validator — one built, or a
+construct waiting only for a mode — returns itself; `None`; `Any`; a class; the
+four builtin container literals (`dict`, `list`, `tuple`, set); a container
+written in some other class; anything else, which is a leaf.
 
 Two of those arms exist because of a question the chain must not ask twice:
 

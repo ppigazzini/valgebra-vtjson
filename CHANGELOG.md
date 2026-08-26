@@ -6,6 +6,48 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- A schema that contains itself is a recursive schema. A record holding itself,
+  or two that reach each other, denote the least set closed under their shape,
+  so a shape reachable only through infinite nesting has no finite member and
+  admits nothing.
+- A subscripted generic over any `Mapping` or `Container` origin is a container
+  schema: `Sequence[int]`, `Mapping[str, int]`, `deque[int]` and
+  `OrderedDict[str, int]` decide rather than refusing to build.
+
+### Changed
+
+- valgebra 0.0.8 or later, imported from the `valgebra` package rather than the
+  extension module beneath it.
+- The differential lane runs a free-threaded interpreter alongside the standard
+  builds.
+
+### Fixed
+
+- Laxness reaches every record a schema names, wherever it is written: a
+  sequence's undeclared positions, a class that declares keys, a record inside a
+  subscripted generic, and the record a combinator carries. `set_label` is the
+  exception, as in vtjson, which validates a labelled schema strictly whatever
+  the ambient flag says.
+- An empty dict declares no clause, so under laxness every mapping belongs.
+- A record keeps the clauses it declares when strictness changes what it admits,
+  rather than losing its typed catch-all.
+- A constant dict key is a key the mapping must carry; only a key that is a
+  schema constrains the other keys.
+- A subscripted generic is a schema rather than a callable, and a construct
+  written in its `Annotated` metadata constrains the value.
+- A container schema written in a class outside the builtins — `UserDict`,
+  `Counter`, `UserList`, `deque` — is a container schema demanding that class.
+- A class schema is read by what kind of class it is. A `TypedDict`, a
+  `Protocol` and a `NamedTuple` are structural: the hints the class declares are
+  checked against the value, and the value's own class is not consulted. Every
+  other class is an instance check. A class declaring no hints constrains
+  nothing, as in vtjson, and only one carrying no annotations at all is refused.
+- `close_to` measures the numbers vtjson counts as numbers, so a `Decimal` is
+  not one of them.
+- `Any` admits every value on every supported interpreter.
+
 ## [0.0.1] - 2026-08-25
 
 The first version carrying a number. Every entry below is a decision the

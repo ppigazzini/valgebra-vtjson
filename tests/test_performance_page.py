@@ -14,9 +14,9 @@ from pathlib import Path
 
 from benches.bench_vtjson_compare import LABELS, SHAPES
 
-_PAGE = (
-    Path(__file__).resolve().parent.parent / "docs" / "06-performance.md"
-).read_text(encoding="utf-8")
+_ROOT = Path(__file__).resolve().parent.parent
+_PAGE = (_ROOT / "docs" / "06-performance.md").read_text(encoding="utf-8")
+_README = (_ROOT / "README.md").read_text(encoding="utf-8")
 
 
 def test_the_page_reports_every_shape_the_benchmark_measures() -> None:
@@ -60,4 +60,19 @@ def test_the_page_says_how_to_confirm_the_interpreter_build() -> None:
     assert "Py_GIL_DISABLED" in _PAGE, (
         "docs/06-performance.md reports a GIL build but gives no way to confirm "
         "one: `--python 3.14` resolves to whatever 3.14 is installed"
+    )
+
+
+def test_only_the_page_quotes_a_ratio() -> None:
+    """A figure repeated somewhere else is a second copy to drift from.
+
+    The benchmark owns these numbers and the page reports them with the spread
+    and the limits they were measured under. A ratio quoted in the README
+    carries neither, and a reader has no way to tell that the families it names
+    are the flattering ones.
+    """
+    quoted = re.findall(r"\d+(?:\.\d+)?x", _README)
+    assert not quoted, (
+        f"README.md quotes {quoted}; docs/06-performance.md owns the ratios, "
+        "with the spread and the limits each was measured under"
     )

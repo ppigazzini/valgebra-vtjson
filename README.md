@@ -50,11 +50,12 @@ asserts they reach the same accept/reject decision, so any drift fails a test.
 
 The headline corpus is [fishtest](https://github.com/official-stockfish/fishtest)'s
 own schemas — fetched at a pinned commit and never vendored (they carry no
-license). Every string-keyed schema, including the full run document
-(`runs_schema`), `api_schema`, `action_schema`, and `results_schema`, and all
-six schema-keyed tables, reach identical decisions through both engines. A
-parity-inventory test also classifies every name on vtjson's public surface as
-supported, ledgered, or infrastructure, so a future vtjson release cannot add a
+license). Every schema it defines reaches the same decision through both
+engines, the full run document and the schema-keyed tables included;
+`tests/test_fishtest_upstream.py` owns that list and fails on a schema it does
+not cover, so a schema fishtest adds cannot go quietly untested. A
+parity-inventory test classifies every name on vtjson's public surface as
+supported, ledgered, or infrastructure, so a vtjson release cannot add a
 construct that silently goes unsupported.
 
 That makes this repo valgebra's real-world proving ground: if the core can carry
@@ -65,12 +66,12 @@ construct mapping and the full ledger of intentional differences are in
 ## Performance
 
 Translating a vtjson schema onto valgebra's Rust core makes the same schema
-validate much faster than under pure-Python vtjson, with the same accept/reject
-decision. On a synthetic benchmark (compile-once on both sides, against the
-LTO+PGO release wheel of valgebra), valgebra is ~14x faster on a 50-field record
-and ~21x–29x faster on nested records, deep nesting, large arrays, and unions.
-Numbers, method, and limits are in
-[docs/06-performance.md](docs/06-performance.md).
+validate faster than under pure-Python vtjson, with the same accept/reject
+decision. How much faster depends on the shape — a regex format gains least, a
+large array most — so the per-family figures, each with the spread it was
+measured with, live where the benchmark that produces them can be re-run against
+them: [docs/06-performance.md](docs/06-performance.md), along with what the
+comparison does not cover.
 
 ## Development
 
