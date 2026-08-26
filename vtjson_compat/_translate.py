@@ -10,7 +10,7 @@ import importlib
 import math
 from collections.abc import Callable, Mapping
 from collections.abc import Set as AbstractSet
-from typing import Annotated
+from typing import Annotated, Union, get_args, get_origin
 
 from ._valgebra_api import CompiledValidator
 from ._valgebra_api import (
@@ -188,7 +188,10 @@ def _translate(  # noqa: PLR0911
         return schema
     if schema is None:
         return _validator(None)
-    if isinstance(schema, type):
+    if isinstance(schema, type) and get_origin(schema) is None:
+        # A subscripted builtin generic answers `isinstance(..., type)` before
+        # 3.11, so asking that alone reads `dict[str, int]` as a class and hands
+        # it to valgebra whole. Having an origin is what tells the two apart.
         return _translate_type(schema, open_records=open_records)
     if isinstance(schema, dict):
         return _translate_dict(schema, open_records=open_records)
@@ -202,7 +205,26 @@ def _translate(  # noqa: PLR0911
 
 
 def _translate_leaf(schema: object, *, exact: bool) -> CompiledValidator:
-    """Translate a schema that is not a container: a predicate or a constant."""
+    """Translate a leaf schema.
+
+    A typing form, a predicate, or a constant — anything that is not a container.
+    """
+    metadata = getattr(schema, "__metadata__", None)
+    if metadata is not None:
+        # vtjson reads `Annotated[T, *rest]` as T and every one of `rest`, each a
+        # schema in its own right, so a construct written there constrains the
+        # value. Handing the whole form to valgebra instead reads the metadata by
+        # its own marker protocol, and a construct is not one of those markers —
+        # so the constraint would be dropped rather than applied.
+        base = _translate(schema.__origin__, exact=exact)  # ty: ignore[unresolved-attribute]
+        return _intersect(base, *(_translate(item, exact=exact) for item in metadata))
+    origin = get_origin(schema)
+    if origin is not None:
+        # A subscripted generic — `list[int]`, `Literal["a", "b"]`, `int | str` —
+        # is a schema valgebra reads directly. Several are also callable, and
+        # calling one builds a container from the value rather than judging it:
+        # `list[int]("a")` is `["a"]`, which a predicate reads as a pass.
+        return _validator(_translated_alias(schema, origin, exact=exact))
     if callable(schema):
         if getattr(schema, "_vtjson_nullary", False):
             # A bare nullary construct, like vtjson's auto-instantiated bare class.
@@ -213,6 +235,34 @@ def _translate_leaf(schema: object, *, exact: bool) -> CompiledValidator:
         return _near(schema)
     # Anything else is an exact-value constant matched by equality.
     return _validator(schema)
+
+
+# The generics whose arguments are schemas. `Literal`'s are values, and a form
+# not listed here is handed to valgebra whole rather than taken apart.
+_PARAMETERISED = (list, set, frozenset, tuple, dict, Union)
+
+
+def _translated_alias(schema: object, origin: object, *, exact: bool) -> object:
+    """Rebuild a subscripted generic with each argument translated.
+
+    Handing the form to valgebra whole would read its arguments by valgebra's own
+    conventions, and a vtjson construct written inside one — `dict[str,
+    Annotated[int, ge(0)]]` — is not one of those. Translating the arguments
+    first is what carries the construct through.
+    """
+    if origin not in _PARAMETERISED:
+        return schema
+    arguments = tuple(
+        item if item is Ellipsis else _translate(item, exact=exact)
+        for item in get_args(schema)
+    )
+    if origin is Union:
+        # Built as a union of the translated arguments rather than by
+        # subscripting `Union`, which before 3.11 admits only types and a
+        # translated argument is a validator.
+        return _union(*arguments)
+    # A subscriptable origin, since `_PARAMETERISED` lists only those.
+    return origin[arguments]  # ty: ignore[not-subscriptable]
 
 
 def _translate_type(schema: type, *, open_records: bool = False) -> CompiledValidator:

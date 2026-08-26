@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 from fractions import Fraction
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Annotated, Any, Literal, Optional
 
 import pytest
 import vtjson as vt
@@ -54,6 +54,39 @@ ROWS: list[tuple[str, Callable[[Any], object], list[object]]] = [
     ("quote(float)", lambda m: m.quote(1.5), [1.5, NEAR, FAR]),
     # An int constant is exact in both.
     ("int constant", lambda m: 2, [2, 2.0000000001, 3]),  # noqa: ARG005
+    # vtjson reads `Annotated` metadata as further schemas the value must also
+    # satisfy, so a construct written there constrains rather than decorates.
+    ("Annotated[int, ge(0)]", lambda m: Annotated[int, m.ge(0)], [1, 0, -1, "x"]),
+    (
+        "Annotated[int, ge, le]",
+        lambda m: Annotated[int, m.ge(0), m.le(10)],
+        [0, 5, 10, -1, 11],
+    ),
+    (
+        "Annotated[str, regex]",
+        lambda m: Annotated[str, m.regex("[a-z]+")],
+        ["ab", "A", 1],
+    ),
+    (
+        "dict[str, Annotated]",
+        lambda m: dict[str, Annotated[int, m.ge(0)]],
+        [{}, {"a": 1}, {"a": -1}, {"a": "x"}],
+    ),
+    (
+        "list[Annotated]",
+        lambda m: list[Annotated[int, m.ge(0)]],
+        [[], [1], [-1], ["x"]],
+    ),
+    # A subscripted generic is a schema valgebra reads directly. Calling it
+    # instead builds a container from the value, and a non-empty one is truthy.
+    ("list[int]", lambda m: list[int], [[], [1], [1, "a"], "a", {"a": 1}, 1]),  # noqa: ARG005
+    ("dict[str,int]", lambda m: dict[str, int], [{}, {"a": 1}, {"a": "x"}, "a"]),  # noqa: ARG005
+    ("tuple[int,str]", lambda m: tuple[int, str], [(1, "a"), (1, 1), [1, "a"], "a"]),  # noqa: ARG005
+    ("set[int]", lambda m: set[int], [set(), {1}, {"a"}, "a"]),  # noqa: ARG005
+    # These typing forms are not callable, so they reached valgebra already.
+    # `Optional` rather than `X | None`: the spelling is what is under test.
+    ("Optional[int]", lambda m: Optional[int], [1, None, "a"]),  # noqa: ARG005, UP045
+    ("Literal['a','b']", lambda m: Literal["a", "b"], ["a", "b", "c", 1]),  # noqa: ARG005
     # `close_to` measures numbers vtjson recognises as such. A `Decimal` or a
     # `Fraction` compares fine under `math.isclose` and is not one of them.
     (

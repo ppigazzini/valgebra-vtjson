@@ -88,6 +88,11 @@ clauses either way, so neither mode discards them. Nesting follows vtjson too â€
 each wrapper builds a validator, and an enclosing wrapper cannot reach inside
 one, so the innermost mode stands.
 
+`Annotated[T, *rest]` is `T` and every one of `rest`, each read as a schema in
+its own right, as vtjson reads it â€” so a construct written in the metadata
+constrains the value rather than decorating it, including inside a subscripted
+generic such as `dict[str, Annotated[int, ge(0)]]`.
+
 A dict key that is not a string is a **clause** when it is a schema and a
 **declared key** when it is a constant: `{int: str}` says nothing about a
 mapping with no int key, and `{1: str}` says the mapping carries a `1`.
