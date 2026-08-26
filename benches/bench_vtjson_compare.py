@@ -120,6 +120,23 @@ def shape_heterogeneous() -> tuple[object, object, object]:
     return schema, schema, {**str_keyed, **int_keyed}
 
 
+# How each shape is named where its measurement is reported. The benchmark owns
+# the list of families and the words for them, so a page cannot carry a shorter
+# list or a different name for one.
+LABELS = {
+    "scalar": "Scalar (`int`)",
+    "record": "Record, 50 fields",
+    "mapping": "Mapping `{str: int}`, 50 entries",
+    "array": "`[int, ...]`, 10,000 elements",
+    "nested": "Nested record + `[str, ...]`",
+    "deep": "Deep nesting (12 levels)",
+    "union": "Union (4 arms)",
+    "refinement": "Refinement (bounded int)",
+    "format": "Format (regex)",
+    "prefix_tail": "Prefix+tail `[str, int, ...]`",
+    "heterogeneous": "Heterogeneous `{str: int, int: bool}`",
+}
+
 SHAPES = {
     "scalar": shape_scalar,
     "record": shape_record,
