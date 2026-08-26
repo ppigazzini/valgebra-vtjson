@@ -105,6 +105,58 @@ def test_the_validate_flag_keeps_them_too(strict: bool) -> None:  # noqa: FBT001
     )
 
 
+# A sequence declares positions the way a record declares keys, so laxness frees
+# the positions after the declared ones and leaves those alone.
+SEQUENCES: list[object] = [
+    [],
+    [1],
+    [1, "a"],
+    [1, "a", 99],
+    [1, 2],
+    ["a"],
+    "not a list",
+    (1, "a"),
+]
+
+SEQUENCE_ROWS: list[tuple[str, Callable[[Any], object], list[object]]] = [
+    ("lax of a fixed list", lambda m: m.lax([int, str]), SEQUENCES),
+    ("strict of a fixed list", lambda m: m.strict([int, str]), SEQUENCES),
+    ("lax of a one-element list", lambda m: m.lax([int]), SEQUENCES),
+    ("lax of an empty list", lambda m: m.lax([]), SEQUENCES),
+    ("lax of a homogeneous list", lambda m: m.lax([int, ...]), SEQUENCES),
+    (
+        "lax of a fixed tuple",
+        lambda m: m.lax((int, str)),
+        [(), (1,), (1, "a"), (1, "a", 99), (1, 2), [1, "a"]],
+    ),
+    (
+        "lax of an empty tuple",
+        lambda m: m.lax(()),
+        [(), (1,), (1, "a"), [1]],
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    ("label", "build", "objects"), SEQUENCE_ROWS, ids=[r[0] for r in SEQUENCE_ROWS]
+)
+def test_laxness_frees_the_positions_a_sequence_does_not_declare(
+    label: str,
+    build: Callable[[Any], object],
+    objects: list[object],
+) -> None:
+    """A declared position still decides; an undeclared one is free."""
+    reference, layer = build(vt), build(vg)
+    divergences = [
+        (obj, _decide(vt, reference, obj), _decide(vg, layer, obj))
+        for obj in objects
+        if _decide(vt, reference, obj) != _decide(vg, layer, obj)
+    ]
+    assert not divergences, f"{label}: " + ", ".join(
+        f"{obj!r} vtjson={a} layer={b}" for obj, a, b in divergences
+    )
+
+
 # Every tower of wrappers, against a record nested one deep with an undeclared
 # key at the bottom.
 TOWERS: list[tuple[str, Callable[[Any], object]]] = [

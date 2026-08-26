@@ -78,8 +78,10 @@ valgebra follows the typing spec's model of literals and so decides differently.
 | Schema nesting depth | unbounded short of Python's own recursion | a schema reaching 128 levels of valgebra nesting is refused when it is built; a one-element list costs about three levels per source level, so `[[[…]]]` reaches its limit at 43 | Flatten the schema, or express the repetition with a homogeneous `[T, ...]`, which costs one level. |
 | `Apply` / `skip_first` | reorder how `Annotated` arguments apply | not supported (the layer applies `Annotated` metadata in declaration order) | Reorder the `Annotated` arguments instead; valgebra has no apply-order modifier. |
 
-Strictness settles only what happens to a key **no** clause claims: `strict`
-rejects it, `lax` admits it. A record's named fields and its typed catch-all are
+Strictness settles only what happens to a key or a position the schema does
+**not** declare: `strict` rejects it, `lax` admits it. A fixed-length sequence
+declares positions the way a record declares keys, so a lax `[int, str]` checks
+those two and admits whatever follows them. A record's named fields and its typed catch-all are
 clauses either way, so neither mode discards them. Nesting follows vtjson too —
 each wrapper builds a validator, and an enclosing wrapper cannot reach inside
 one, so the innermost mode stands.

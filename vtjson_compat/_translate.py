@@ -254,14 +254,18 @@ def _translate_list(
     # element repeated; `[A, B, C]` is a fixed-length positional list; `[]`
     # matches only the empty list. valgebra's native list form expresses each.
     if schema and schema[-1] is Ellipsis:
+        # Every position is declared by the repeat, so laxness has nothing to free.
         prefix = [_translate(item, open_records=open_records) for item in schema[:-1]]
         return _of_own_class(schema, _validator([*prefix, ...]))
-    return _of_own_class(
-        schema,
-        _fixed_sequence(
-            *(_translate(item, open_records=open_records) for item in schema)
-        ),
-    )
+    declared = [_translate(item, open_records=open_records) for item in schema]
+    if open_records:
+        # A sequence declares positions the way a record declares keys: laxly the
+        # ones it does not declare are free, so an unconstrained element repeats
+        # after the declared prefix.
+        return _of_own_class(
+            schema, _validator([*declared, _validator(_anything), ...])
+        )
+    return _of_own_class(schema, _fixed_sequence(*declared))
 
 
 def _translate_tuple(
@@ -281,6 +285,10 @@ def _translate_tuple(
     # valgebra reads a fixed-length tuple as the subscription `tuple[A, B]`, not a
     # tuple literal, so build the generic alias from the translated elements.
     fixed = tuple(_translate(item, open_records=open_records) for item in schema)
+    if open_records:
+        # As for a list: the positions the tuple does not declare are free.
+        free = (*fixed, _validator(_anything), Ellipsis)
+        return _of_own_class(schema, _validator(tuple[free]))  # ty: ignore[invalid-type-form]
     return _of_own_class(schema, _validator(tuple[fixed]))  # ty: ignore[invalid-type-form]
 
 
