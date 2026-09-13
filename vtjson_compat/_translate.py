@@ -13,7 +13,15 @@ from collections import UserString
 from collections.abc import Callable, Container, Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from types import UnionType
-from typing import Annotated, Any, Union, get_args, get_origin, get_type_hints
+from typing import (
+    Annotated,
+    Any,
+    Union,
+    get_args,
+    get_origin,
+    get_type_hints,
+    is_typeddict,
+)
 
 from ._valgebra_api import CompiledValidator
 from ._valgebra_api import (
@@ -715,7 +723,13 @@ def _translate_type(schema: type, *, open_records: bool = False) -> CompiledVali
         # declared field keeps deciding because a named field takes precedence
         # over the clause opening adds.
         return built.open()
-    return built
+    # A `TypedDict` denotes an **open** set: the typing spec assigns it every
+    # dict carrying the declared keys, whatever else it carries, and valgebra
+    # reads it that way. vtjson reads the same declaration as a record and
+    # refuses a key it does not declare, so strictness here is the layer's to
+    # apply rather than the underlying default's -- as it already is for every
+    # other record this module builds.
+    return built.close() if is_typeddict(schema) else built
 
 
 # The plain builtins carry no demand beyond their kind. Any other class a
@@ -834,11 +848,92 @@ def _translate_dict(
         translated[key] = _union(field, *alternatives) if alternatives else field
     if open_records:
         translated[_unclaimed_key(schema, catch_alls)] = _validator(_anything)
-    built = _of_own_class(schema, _validator(translated))
+    try:
+        structure = _validator(translated)
+    except NotImplementedError:
+        # A clause whose key is *narrowed* -- a regex, an interval, any vtjson
+        # construct -- names part of a key type rather than a whole one, and
+        # valgebra's map form takes a key type or a `Literal` and nothing
+        # between: two narrowed clauses can overlap without either containing
+        # the other, which is a question that model does not answer twice the
+        # same way. Its own advice is to check such keys *beside* the mapping
+        # rather than inside it, which is what this does, over the very clauses
+        # the loop above already compiled.
+        #
+        # What it costs is the structural reading of these dicts -- they decide
+        # by running the clauses rather than by the shape -- and membership is
+        # what this layer is one-to-one about. Every other dict keeps the native
+        # form.
+        structure = _clauses_beside_the_mapping(
+            schema, translated, catch_alls, open_records=open_records
+        )
+    built = _of_own_class(schema, structure)
     declared = tuple(
         key for key in schema if not isinstance(key, str) and not _is_key_schema(key)
     )
     return _intersect(built, _carries(declared)) if declared else built
+
+
+def _clauses_beside_the_mapping(
+    schema: dict[object, object],
+    translated: dict[object, CompiledValidator],
+    catch_alls: dict[object, tuple[CompiledValidator, CompiledValidator]],
+    *,
+    open_records: bool,
+) -> CompiledValidator:
+    """Build ``schema``'s dict check with its key clauses run beside the mapping.
+
+    The reading is the one the native form gives: a declared field decides its
+    own value, a key some clause claims belongs when **any** claiming clause
+    admits its value, and a key no clause claims belongs only under laxness.
+    """
+    # The clause a declared field carries is the one the caller already built,
+    # which is the field's own schema joined with every catch-all claiming its
+    # name -- a named key under two catch-alls has three ways to pass, and
+    # rebuilding the field's schema alone would take two of them away.
+    fields = [
+        (_field_name(key), not key.endswith("?"), translated[key])
+        for key in schema
+        if isinstance(key, str)
+    ]
+    names = {name for name, _, _ in fields}
+    clauses = list(catch_alls.values())
+
+    def declared_holds(
+        obj: Mapping[object, object],
+        name: str,
+        required: bool,  # noqa: FBT001  (one row of `fields`, unpacked)
+        clause: CompiledValidator,
+    ) -> bool:
+        if name not in obj:
+            return not required
+        return clause.is_valid(obj[name])
+
+    def claimed_holds(key: object, value: object) -> bool:
+        claiming = [clause for pattern, clause in clauses if pattern.is_valid(key)]
+        if not claiming:
+            # No clause claims it: laxness excuses the key and strictness
+            # refuses it, which is what the unclaimed-key clause of the native
+            # form says.
+            return open_records
+        return any(clause.is_valid(value) for clause in claiming)
+
+    def check(obj: object) -> bool:
+        if not isinstance(obj, Mapping):
+            return False
+        try:
+            return all(
+                declared_holds(obj, name, required, clause)
+                for name, required, clause in fields
+            ) and all(
+                claimed_holds(key, value)
+                for key, value in obj.items()
+                if not (isinstance(key, str) and key in names)
+            )
+        except Exception:  # noqa: BLE001  (a mapping that cannot answer is not one)
+            return False
+
+    return _intersect(_validator(dict), _predicate(check))
 
 
 def _unclaimed_key(

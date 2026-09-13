@@ -8,6 +8,26 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- valgebra 0.0.10 or later. Two of its readings changed under the layer and
+  both are absorbed here, so every verdict is the one vtjson reaches:
+
+  - A `TypedDict` denotes an **open** set there, which is the set the typing
+    spec assigns it: every dict carrying the declared keys, whatever else it
+    carries. vtjson reads the same declaration as a record and refuses an
+    undeclared key, so the layer closes what it translates. Strictness was
+    already the layer's to apply for every other record it builds; a
+    `TypedDict` had been leaning on the underlying default.
+
+  - A clause whose key is **narrowed** -- a `regex`, an `interval`, any vtjson
+    construct written as a dict key -- is refused by valgebra's map form, which
+    takes a key type or a `Literal` and nothing between. Two narrowed clauses
+    can overlap without either containing the other, and that map model does not
+    answer such a key twice the same way. Its advice is to check those keys
+    beside the mapping rather than inside it, and that is what the layer now
+    does, running the clauses it had already compiled. Only a dict carrying such
+    a key takes that path; every other one keeps the native form, and what the
+    path costs is the structural reading rather than any verdict.
+
 - valgebra 0.0.9 or later. It reads a marker that is itself callable by asking
   it, so a `functools.partial` written as a vtjson predicate keeps the arguments
   bound to it. Under 0.0.8 the layer took the partial's `.func` and dropped
