@@ -336,7 +336,7 @@ def filter(  # noqa: A001  (mirrors vtjson's public name)
 
         def check(obj: object) -> bool:
             try:
-                return inner.is_valid(filter(obj))  # ty: ignore[call-top-callable]
+                return inner.is_valid(filter(obj))
             except Exception:  # noqa: BLE001  (a transform error means non-member)
                 return False
 

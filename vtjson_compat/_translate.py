@@ -547,7 +547,7 @@ def _translate_leaf(
     if callable(schema):
         if getattr(schema, "_vtjson_nullary", False):
             # A bare nullary construct, like vtjson's auto-instantiated bare class.
-            return _translate(schema())  # ty: ignore[call-top-callable]
+            return _translate(schema())
         # A bare callable is a predicate over any value (the vtjson convention).
         return _validator(Annotated[object, schema])
     if isinstance(schema, float) and not exact:
