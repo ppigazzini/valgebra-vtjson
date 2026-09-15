@@ -8,6 +8,19 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- valgebra 0.0.11 or later. Nothing it reads changed, so every verdict is the
+  one it already reached: 629 rows pass on the newest interpreter and on the
+  free-threaded build, 627 on the floor, against the pinned oracle. The release
+  is a performance one -- compiling an annotation and building a validator each
+  got cheaper, and a record walk got cheaper where the dict carries interned
+  keys -- and it fixes a `tuple` subclass overriding `__len__` taking PyPy
+  down, which the layer never reached because it builds no such subclass.
+
+  The floor moves because the layer stops calling `Validator.simplify`, which
+  valgebra deprecates and removes next. Nothing is lost by dropping it: a
+  constructor returns the lattice normal form, so `repr` shows the reduced
+  schema and there is nothing left to ask for.
+
 - valgebra 0.0.10 or later. Two of its readings changed under the layer and
   both are absorbed here, so every verdict is the one vtjson reaches:
 

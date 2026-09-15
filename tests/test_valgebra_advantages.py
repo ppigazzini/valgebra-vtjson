@@ -106,11 +106,14 @@ def test_emptiness_detection_is_a_valgebra_only_capability() -> None:
 
 
 def test_simplification_is_a_valgebra_only_capability() -> None:
-    # valgebra reduces a schema by the lattice laws without changing its meaning;
-    # vtjson cannot manipulate a schema as an algebraic object at all.
-    assert repr(complement(complement(int)).simplify()) == "int"
-    assert repr(intersection(int, complement(int)).simplify()) == "nothing"
-    assert repr(union(int, complement(int)).simplify()) == "anything"
+    # valgebra reduces a schema by the lattice laws without changing its
+    # meaning, and does it where the schema is built rather than on request:
+    # a constructor returns the lattice normal form, so `repr` shows the
+    # reduced schema and there is nothing left to ask for. vtjson cannot
+    # manipulate a schema as an algebraic object at all.
+    assert repr(complement(complement(int))) == "int"
+    assert repr(intersection(int, complement(int))) == "nothing"
+    assert repr(union(int, complement(int))) == "anything"
 
 
 def test_recursion_via_a_lazy_fixpoint() -> None:
