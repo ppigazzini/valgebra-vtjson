@@ -232,6 +232,33 @@ def _structural(
     return _predicate(lambda obj: _attributes_match(inner, obj))
 
 
+def _typed_dict_record(schema: object, *, open_records: bool) -> CompiledValidator:
+    """Build the record a ``TypedDict`` declaration names, with no other key.
+
+    A ``TypedDict`` denotes an **open** set: the typing spec assigns it every
+    dict carrying the declared keys, whatever else it carries, and valgebra
+    reads it that way -- a record beside a ``str`` clause. vtjson reads the same
+    declaration as a record and refuses a key it does not declare, so the record
+    is built from the declaration rather than narrowed out of valgebra's reading
+    of it. Closing a mapping keeps the clauses it carries, and that ``str``
+    clause is the one vtjson does not have; built from the declaration there is
+    no clause to keep, and ``open_records`` frees every key as it does for every
+    other record this module builds.
+
+    A key is required unless the declaration says otherwise, which is what the
+    trailing ``?`` spells. ``is_typeddict`` is not a type guard, so the two
+    attributes the class carries are read by name.
+    """
+    required: frozenset[str] = getattr(schema, "__required_keys__", frozenset())
+    return _translate_dict(
+        {
+            name if name in required else f"{name}?": hint
+            for name, hint in get_type_hints(schema, include_extras=True).items()
+        },
+        open_records=open_records,
+    )
+
+
 def _predicate(check: object) -> CompiledValidator:
     """Build a validator that admits a value iff ``check(value)`` is truthy."""
     return _validator(Annotated[object, check])
@@ -713,23 +740,16 @@ def _translate_type(schema: type, *, open_records: bool = False) -> CompiledVali
             _structural(schema, as_dict=False, open_records=open_records),
         )
     # Any other class is an instance check, which is what vtjson gives a plain
-    # type. valgebra reads a dataclass, an Enum and a TypedDict the same way it
-    # does, so each translates directly.
+    # type. valgebra reads a dataclass and an Enum the same way it does, so each
+    # translates directly; a `TypedDict` is the declaration the two read
+    # differently, and `_typed_dict_record` says how.
+    if is_typeddict(schema):
+        return _typed_dict_record(schema, open_records=open_records)
+    # Laxness frees the keys a schema does not declare. `open` reaches a record
+    # and nothing else, which is the whole rule: an instance check and an
+    # attribute schema declare no key to free.
     built = _validator(schema)
-    if open_records:
-        # A `TypedDict` declares keys, so laxness frees the ones it does not.
-        # `open` reaches a record and nothing else, which is the whole rule: an
-        # instance check and an attribute schema declare no key to free, and a
-        # declared field keeps deciding because a named field takes precedence
-        # over the clause opening adds.
-        return built.open()
-    # A `TypedDict` denotes an **open** set: the typing spec assigns it every
-    # dict carrying the declared keys, whatever else it carries, and valgebra
-    # reads it that way. vtjson reads the same declaration as a record and
-    # refuses a key it does not declare, so strictness here is the layer's to
-    # apply rather than the underlying default's -- as it already is for every
-    # other record this module builds.
-    return built.close() if is_typeddict(schema) else built
+    return built.open() if open_records else built
 
 
 # The plain builtins carry no demand beyond their kind. Any other class a

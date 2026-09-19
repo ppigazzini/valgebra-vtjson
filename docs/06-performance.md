@@ -44,7 +44,7 @@ interpreter — `--python cpython-3.14.7` — if the default resolves to the wro
 one.
 
 ```bash
-VIRTUAL_ENV=/tmp/bench uv pip install "valgebra==0.0.9" "vtjson==2.3.0" \
+VIRTUAL_ENV=/tmp/bench uv pip install "valgebra==0.0.12" "vtjson==2.3.0" \
   pytest pytest-benchmark
 VIRTUAL_ENV=/tmp/bench uv pip install -e . --no-deps
 /tmp/bench/bin/python -m pytest benches/bench_vtjson_compare.py \
@@ -55,23 +55,23 @@ VIRTUAL_ENV=/tmp/bench uv pip install -e . --no-deps
 ## Baseline
 
 AMD Ryzen 7 PRO 7840U (Zen 4 "Phoenix", a 2023-era mobile part) under WSL2 on
-Linux 6.18, CPython 3.14.7 standard build, valgebra 0.0.9 from PyPI, vtjson
+Linux 6.18, CPython 3.14.7 standard build, valgebra 0.0.12 from PyPI, vtjson
 2.3.0. Mean and standard deviation over at least two hundred rounds of a single
-membership check on a passing value, lower is better:
+membership check on a passing value, median of three runs, lower is better:
 
 | Family | valgebra | vtjson | valgebra faster by |
 | --- | --- | --- | --- |
-| Scalar (`int`) | 35 ± 10 ns | 820 ± 348 ns | 23.4x |
-| Union (4 arms) | 67 ± 21 ns | 1.93 ± 1.39 us | 28.9x |
-| Refinement (bounded int) | 91 ± 24 ns | 1.13 ± 0.39 us | 12.4x |
-| Nested record + `[str, ...]` | 142 ± 36 ns | 2.99 ± 1.17 us | 21.1x |
-| Format (regex) | 197 ± 64 ns | 1.01 ± 0.38 us | 5.1x |
-| Deep nesting (12 levels) | 340 ± 116 ns | 6.44 ± 1.24 us | 18.9x |
-| Record, 50 fields | 834 ± 242 ns | 10.7 ± 2.72 us | 12.8x |
-| Mapping `{str: int}`, 50 entries | 885 ± 215 ns | 14.0 ± 3.35 us | 15.8x |
-| Heterogeneous `{str: int, int: bool}` | 2.10 ± 0.59 us | 41.3 ± 11.1 us | 19.7x |
-| `[int, ...]`, 10,000 elements | 45.3 ± 10.6 us | 1244 ± 109 us | 27.4x |
-| Prefix+tail `[str, int, ...]` | 45.6 ± 10.3 us | 1217 ± 112 us | 26.7x |
+| Scalar (`int`) | 41 ns ± 69 ns | 844 ns ± 407 ns | 20.7x |
+| Union (4 arms) | 51 ns ± 21 ns | 1.92 us ± 939 ns | 37.9x |
+| Refinement (bounded int) | 89 ns ± 30 ns | 1.09 us ± 496 ns | 12.2x |
+| Nested record + `[str, ...]` | 100 ns ± 35 ns | 3.04 us ± 1.56 us | 30.5x |
+| Format (regex) | 202 ns ± 75 ns | 1.04 us ± 494 ns | 5.2x |
+| Deep nesting (12 levels) | 268 ns ± 120 ns | 6.74 us ± 2.79 us | 25.1x |
+| Record, 50 fields | 664 ns ± 251 ns | 10.98 us ± 12.24 us | 16.5x |
+| Mapping `{str: int}`, 50 entries | 1.05 us ± 325 ns | 14.62 us ± 7.76 us | 14.0x |
+| Heterogeneous `{str: int, int: bool}` | 2.13 us ± 804 ns | 43.56 us ± 12.35 us | 20.4x |
+| `[int, ...]`, 10,000 elements | 9.83 us ± 3.18 us | 1261 us ± 135.61 us | 128.3x |
+| Prefix+tail `[str, int, ...]` | 65.19 us ± 17.19 us | 1286 us ± 153.39 us | 19.7x |
 
 valgebra is faster on every family. The spread is wide in relative terms — a
 per-round standard deviation of a third is ordinary on a laptop under load — and
@@ -80,9 +80,12 @@ same rounds and absorb the same noise.
 
 The gap widens with the number of elements checked: vtjson pays per-element
 Python interpreter overhead, while valgebra crosses into Rust once per call and
-walks the value there.
+walks the value there. It widens furthest where the element schema is the same
+at every position — a homogeneous `[int, ...]` is one loop over one element
+schema, where a prefix and a tail is a machine that reads a different schema at
+the front.
 
-The **format** family is the narrowest at 5.1x, and it is the one place the two
+The **format** family is the narrowest at 5.2x, and it is the one place the two
 libraries run the same engine. A pattern is matched by Python's `re` on both
 sides, because the compatibility layer holds itself to `re`'s decisions:
 valgebra's native `Regex` is a Rust engine whose dialect differs on patterns
@@ -94,8 +97,8 @@ narrow margin is that choice, not a limit of the walk.
 - These are a single machine class; re-run on your own hardware for absolute
   numbers. The ratios are what travel.
 - vtjson's default `validate(schema, obj)` recompiles the schema on every call,
-  which is slower still (for the 50-field record, ~270 us per call versus the
-  ~12 us compile-once path measured above). The table uses vtjson's compile-once
+  which is slower still (for the 50-field record, ~220 us per call versus the
+  ~10 us compile-once path measured above). The table uses vtjson's compile-once
   path, its best case, to keep the comparison fair.
 - valgebra and vtjson reach the same decision here only for the constructs the
   compatibility layer supports; the differences ledger

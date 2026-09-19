@@ -8,6 +8,27 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- valgebra 0.0.12 or later, and a `TypedDict` builds its record from the
+  declaration. Every verdict is the one the layer already reached -- 629 rows
+  on the newest interpreter and on the free-threaded build, 627 on the floor,
+  against the pinned oracle -- and reaching them takes a translation change.
+  0.0.12 reads a `TypedDict` as the typing spec does, an open set: a record
+  beside a `str` clause. Closing a mapping keeps the clauses it carries, so
+  closing that reading leaves the clause in place and the record admits a key
+  it does not declare. vtjson reads the same declaration as a record and
+  refuses such a key, so the layer builds the record from the declaration,
+  where there is no clause to keep.
+
+    The release also decides more of what the layer asks: a record is decided
+    against the union of records it splits across, a subject outside every
+    branch of a union is refuted rather than left open, and an order bound over
+    a base that cannot be compared is refused at build time rather than
+    admitting nothing while reporting itself inhabited.
+
+    `docs/06-performance.md` is re-measured against it. The ratios hold, and
+    the one that moves is a homogeneous `[int, ...]` over ten thousand
+    elements, where the walk is one loop over one element schema.
+
 - valgebra 0.0.11 or later. Nothing it reads changed, so every verdict is the
   one it already reached: 629 rows pass on the newest interpreter and on the
   free-threaded build, 627 on the floor, against the pinned oracle. The release

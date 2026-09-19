@@ -24,12 +24,12 @@ classifiers = [
     "Topic :: Software Development :: Quality Assurance",
     "Typing :: Typed",
 ]
-dependencies = ["valgebra>=0.0.11"]
+dependencies = ["valgebra>=0.0.12"]
 
 [project.optional-dependencies]
 # The network format validators (email, domain_name) reuse the same engines the
 # upstream library uses; they are not needed for the rest of the layer.
-formats = ["email-validator>=2.3.0", "idna>=3.19", "dnspython>=2.8.0"]
+formats = ["email-validator>=2.3.0", "idna>=3.20", "dnspython>=2.8.0"]
 # python-magic (and the system libmagic library) backs the `magic` validator.
 magic = ["python-magic>=0.4.27"]
 
@@ -39,17 +39,17 @@ packages = ["vtjson_compat"]
 [dependency-groups]
 dev = [
     "annotated-types>=0.8",
-    "hypothesis>=6.165.10",
+    "hypothesis>=6.168.0",
     "pytest>=9.1.1",
     "pytest-cov>=7.1.0",
-    "tomli>=2.2.1; python_version < '3.11'",
-    "ruff>=0.16.4",
-    "ty>=0.0.74",
+    "tomli>=2.4.1; python_version < '3.11'",
+    "ruff>=0.16.8",
+    "ty>=0.0.82",
     # Pinned, not floored: the differential suite is a claim about one
     # oracle version, and a floor makes that claim unreproducible.
     "vtjson==2.3.0",
     "email-validator>=2.3.0",
-    "idna>=3.19",
+    "idna>=3.20",
     "dnspython>=2.8.0",
     "python-magic>=0.4.27",
 ]
