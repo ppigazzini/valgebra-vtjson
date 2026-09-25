@@ -8,6 +8,18 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- valgebra 0.0.13 or later. No membership the layer asks about changes, so
+  every verdict is the one it already reached: 629 rows pass on 3.11 through
+  the newest interpreter and on the free-threaded build, 627 on the floor,
+  against the pinned oracle. The release's fixes sit in the decision
+  procedure, which the layer never calls, in how two threads reaching a
+  validator's first call together wait, and in a `frozendict` literal on
+  Python 3.15, a form no vtjson schema spells.
+
+    It makes parts of the walk cheaper, and `docs/06-performance.md` reads the
+    same against it: every ratio lands within the spread of its own runs, so
+    the page keeps its 0.0.12 table and the install line that reproduces it.
+
 - valgebra 0.0.12 or later, and a `TypedDict` builds its record from the
   declaration. Every verdict is the one the layer already reached -- 629 rows
   on the newest interpreter and on the free-threaded build, 627 on the floor,
