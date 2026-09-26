@@ -8,6 +8,20 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- valgebra 0.0.14 or later. No membership the layer asks about changes, so
+  every verdict is the one it already reached: 629 rows pass on 3.11 through
+  the newest interpreter and on the free-threaded build, 627 on the floor,
+  against the pinned oracle. The release's additions are what a static
+  checker reads from a validator and a decision about two classes that lay
+  down slots, which the decision procedure makes and the layer never asks;
+  its fixes refuse a protocol that inherits `@runtime_checkable` rather than
+  carrying it, a form no vtjson schema spells, and give PyPy wheels that
+  install on PyPy 7.3 and 8.0 alike and do not die at the walk's depth bound.
+
+    It changes no step of the walk -- the release's instruction gate reads
+    every shape at 0.00% against the release before -- so `docs/06-performance.md`
+    keeps its 0.0.12 table and the install line that reproduces it.
+
 - valgebra 0.0.13 or later. No membership the layer asks about changes, so
   every verdict is the one it already reached: 629 rows pass on 3.11 through
   the newest interpreter and on the free-threaded build, 627 on the floor,
