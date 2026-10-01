@@ -278,6 +278,12 @@ def div(divisor: int, remainder: int = 0, name: str | None = None) -> CompiledVa
         msg = "the divisor cannot be zero"
         raise SchemaError(msg)
 
+    # Keep the residue a check rather than nodes built from `MultipleOf`.
+    # vtjson computes it with Python's operators, so an int subclass's own
+    # `__sub__`, and then `__mod__` on what that returns, decide; valgebra's
+    # `MultipleOf` asks the value's `__mod__` alone, so a node decides such a
+    # subclass by another computation -- `div(3)` would admit one whose
+    # `__mod__` answers 0, which vtjson refuses.
     def check(obj: object) -> bool:
         if not isinstance(obj, int):
             return False

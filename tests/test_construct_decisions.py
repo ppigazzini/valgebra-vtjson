@@ -23,6 +23,21 @@ import vtjson_compat as vg
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+
+class ModZero(int):
+    """An integer whose own modulo answers 0 whatever it holds."""
+
+    def __mod__(self, other: object) -> int:
+        return 0
+
+
+class SubZero(int):
+    """An integer whose own subtraction answers 0 whatever it holds."""
+
+    def __sub__(self, other: object) -> int:
+        return 0
+
+
 # Inside vtjson's default relative tolerance of 1.5, and unequal to it.
 NEAR = 1.5 + 1e-10
 # Outside it.
@@ -105,6 +120,26 @@ ROWS: list[tuple[str, Callable[[Any], object], list[object]]] = [
     ("div(7, 7)", lambda m: m.div(7, 7), [0, 7, 14, 1]),
     ("div(-3, 1)", lambda m: m.div(-3, 1), [1, 4, -2, 0]),
     ("div(3, 1)", lambda m: m.div(3, 1), [1, 4, 7, 0, 2]),
+    # The residue is computed with the value's own operators: its `__sub__`,
+    # then `__mod__` on what that returns. Where a residue is a node --
+    # `MultipleOf(d)`, or `MultipleOf(g)` less `MultipleOf(2g)` -- the node asks
+    # the value's `__mod__` alone and decides one of each pair the other way
+    # round; `div(3, 1)` is no node, and holds the check where none applies.
+    (
+        "div(3) on a subclass's arithmetic",
+        lambda m: m.div(3),
+        [ModZero(10), SubZero(10)],
+    ),
+    (
+        "div(2, 1) on a subclass's arithmetic",
+        lambda m: m.div(2, 1),
+        [ModZero(11), SubZero(10)],
+    ),
+    (
+        "div(3, 1) on a subclass's arithmetic",
+        lambda m: m.div(3, 1),
+        [ModZero(10), SubZero(10)],
+    ),
     # Both spellings vtjson accepts for a nullary construct.
     ("bare float_", lambda m: m.float_, [1.0, 0.0, 5, True, "x", None]),
     ("called float_()", lambda m: m.float_(), [1.0, 0.0, 5, True, "x"]),
