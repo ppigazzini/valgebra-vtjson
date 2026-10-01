@@ -30,11 +30,13 @@ Two of those arms exist because of a question the chain must not ask twice:
 `_translate_leaf` handles what is not a container. Three things happen there, and
 each is a rule vtjson applies that a naive reading misses:
 
-**`Annotated[T, *rest]` is `T` and every one of `rest`, each a schema.** A
-construct written in the metadata *constrains* the value. Handing the whole form
-to valgebra instead reads the metadata by valgebra's own marker protocol, where a
-vtjson construct is not a marker — so the constraint would be dropped rather than
-applied.
+**`Annotated[T, *rest]` is `T` and every one of `rest`, each a schema.** vtjson
+reads whatever is written in the metadata as a schema that *constrains* the
+value: a construct, and a constant, a mapping, a class or a sequence as well.
+valgebra reads the metadata by its own protocol, where a compiled validator, or
+a callable that is not a class, meets the base, and a constant, a mapping, a
+class or a sequence is metadata it drops. So the layer translates each item as
+a schema, under the base's strictness, and the value meets every one.
 
 **A subscripted generic is a schema, not a callable.** Several are callable, and
 calling one builds a container from the value rather than judging it:
@@ -54,10 +56,14 @@ the value, with the value's own class never consulted:
 | `NamedTuple` | a `tuple` subclass with `_fields` | a tuple, and those attributes |
 
 Everything else is an instance check, which is what vtjson gives a plain type.
-valgebra reads a dataclass, an enum and a `TypedDict` the same way, so those
-translate directly; the other two need building, because valgebra reads a
-`NamedTuple` as a nominal atom and a `Protocol` by `isinstance`, which asks only
-whether an attribute is present rather than what it holds.
+valgebra reads a dataclass and an enum the same way, so those translate
+directly. The three structural kinds are built here, because valgebra reads each
+of them differently: a `TypedDict` as the open set the typing spec assigns it --
+the declared keys beside any other `str` key, unless the class or a base it
+inherits from says `closed` or `extra_items` -- where vtjson reads a record that
+refuses a key the declaration does not name; a `NamedTuple` as a nominal atom;
+and a `Protocol` by `isinstance`, which asks only whether an attribute is present
+rather than what it holds.
 
 The consequence worth stating plainly: a `NamedTuple` schema is nothing like the
 instance check it resembles. A different `NamedTuple` declaring the same field

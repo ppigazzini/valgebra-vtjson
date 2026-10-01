@@ -546,10 +546,13 @@ def _translate_leaf(
     metadata = getattr(schema, "__metadata__", None)
     if metadata is not None:
         # vtjson reads `Annotated[T, *rest]` as T and every one of `rest`, each a
-        # schema in its own right, so a construct written there constrains the
-        # value. Handing the whole form to valgebra instead reads the metadata by
-        # its own marker protocol, and a construct is not one of those markers —
-        # so the constraint would be dropped rather than applied.
+        # schema in its own right, so a constant, a mapping, a class or a
+        # sequence written there constrains the value as a construct does.
+        # valgebra reads the metadata by its own protocol: a compiled validator,
+        # or a callable that is not a class, meets the base, and a constant, a
+        # mapping, a class or a sequence is metadata it drops. Translate each
+        # item as a schema, under the base's strictness, and meet them all, or
+        # those four kinds constrain nothing.
         base = _translate(
             schema.__origin__,  # ty: ignore[unresolved-attribute]
             exact=exact,

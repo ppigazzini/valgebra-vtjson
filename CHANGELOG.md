@@ -8,6 +8,21 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- valgebra 0.0.15 or later. No membership the layer asks about changes, so
+  every verdict is the one it already reached: 629 rows pass on 3.11 through
+  the newest interpreter and on the free-threaded build, 627 on the floor,
+  against the pinned oracle. valgebra reads a compiled validator written in
+  `Annotated` metadata as a meet with the base, and the layer translates every
+  metadata item itself, so no verdict here turns on it. A `ValidationError`
+  from `validate` names a key that is not a bare name as a quoted subscript,
+  `at ['a.b']:`. The release's other fixes are relations the layer does not
+  ask and readings of forms it builds itself, the `TypedDict` among them.
+
+    `docs/06-performance.md` is measured on it, against 0.0.12 interleaved in
+    the same session: a record, a mapping and a prefix with a tail read 22 to
+    53% faster, and a `[int, ...]` of ten thousand 5 to 7% slower, 119 times
+    vtjson's speed where it read 128.
+
 - valgebra 0.0.14 or later. No membership the layer asks about changes, so
   every verdict is the one it already reached: 629 rows pass on 3.11 through
   the newest interpreter and on the free-threaded build, 627 on the floor,
