@@ -39,7 +39,7 @@ packages = ["vtjson_compat"]
 [dependency-groups]
 dev = [
     "annotated-types>=0.8",
-    "hypothesis>=6.168.1",
+    "hypothesis>=6.168.3",
     "pytest>=9.1.1",
     "pytest-cov>=7.1.0",
     "tomli>=2.4.1; python_version < '3.11'",
