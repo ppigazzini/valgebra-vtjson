@@ -264,6 +264,26 @@ def _predicate(check: object) -> CompiledValidator:
     return _validator(Annotated[object, check])
 
 
+def _hooked(schema: object, *, open_records: bool) -> CompiledValidator:
+    """Validate by the ``__validate__`` hook ``schema`` carries, as vtjson does.
+
+    vtjson calls the hook with the strictness in force and reads the empty
+    string as a pass, any other answer as a failure. The hook is code deciding
+    as it likes, so the predicate is the whole of the meaning rather than one
+    part of it. It is read once, when the schema is built, as vtjson reads it.
+    """
+    hook = schema.__validate__  # ty: ignore[unresolved-attribute]
+    strict = not open_records
+
+    def check(obj: object) -> bool:
+        # vtjson passes the path to the value as `name`, and positionally under
+        # a sequence; a predicate is told neither, so the hook is called by
+        # keyword with the name vtjson gives a value validated alone.
+        return hook(obj, name="object", strict=strict, subs={}) == ""
+
+    return _predicate(check)
+
+
 def _constant(schema: object) -> CompiledValidator:
     """Admit the values equal to ``schema``, which is vtjson's reading of a constant.
 
@@ -495,19 +515,22 @@ def _container_translator(
     )
 
 
-def _already_a_validator(
-    schema: object, *, open_records: bool
-) -> CompiledValidator | None:
-    """Return the validator ``schema`` already is, or `None` if it is a spec.
+def _deciding_itself(schema: object, *, open_records: bool) -> CompiledValidator | None:
+    """Return the validator ``schema`` decides by, or `None` if it is a spec.
 
     A built validator carries the mode it was built with, which is what makes
     the innermost `lax` or `strict` the one that decides. A construct carries
-    everything *but* the mode, so this is where it is given one.
+    everything *but* the mode, so this is where it is given one. An object
+    carrying vtjson's `__validate__` hook decides by it, and vtjson asks for the
+    hook before any other reading, so a class that carries one -- a dataclass, a
+    `NamedTuple` -- is read by it alone.
     """
     if isinstance(schema, _Deferred):
         return schema._under(open_records=open_records)  # noqa: SLF001
     if isinstance(schema, CompiledValidator):
         return schema
+    if hasattr(schema, "__validate__"):
+        return _hooked(schema, open_records=open_records)
     return None
 
 
@@ -525,9 +548,9 @@ def _translate(
     unchanged, so a wrapper cannot reach inside one and the innermost mode
     stands, as it does in vtjson.
     """
-    already = _already_a_validator(schema, open_records=open_records)
-    if already is not None:
-        return already
+    itself = _deciding_itself(schema, open_records=open_records)
+    if itself is not None:
+        return itself
     if schema is None:
         return _validator(None)
     if schema is Any:
@@ -1044,9 +1067,11 @@ def _is_key_schema(key: object) -> bool:
     as a key the value must carry. `{int: str}` says nothing about a mapping
     with no int key; `{1: str}` says the mapping has a `1`.
     """
-    return isinstance(
-        key, type | CompiledValidator | _Deferred | tuple | frozenset
-    ) or callable(key)
+    return (
+        isinstance(key, type | CompiledValidator | _Deferred | tuple | frozenset)
+        or callable(key)
+        or hasattr(key, "__validate__")
+    )
 
 
 def _carries(keys: tuple[object, ...]) -> CompiledValidator:

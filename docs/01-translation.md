@@ -11,7 +11,9 @@ not arbitrary — it mirrors vtjson's own dispatch, and swapping two arms change
 what a schema means.
 
 The arms, in order: a schema that is already a validator — one built, or a
-construct waiting only for a mode — returns itself; `None`; `Any`; a class; the
+construct waiting only for a mode — returns itself; an object carrying vtjson's
+`__validate__` hook decides by it, called with the strictness in force, ahead
+of every reading of a class, as vtjson asks it; `None`; `Any`; a class; the
 four builtin container literals (`dict`, `list`, `tuple`, set); a container
 written in some other class; anything else, which is a leaf.
 

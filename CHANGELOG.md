@@ -182,6 +182,12 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Laxness stops at a set, as in vtjson, which validates every member strictly
   whatever mode is in force: a lax `{(int,)}` refuses `{(1, 2)}`, where the
   layer freed the member tuple's undeclared positions and admitted it.
+- An object carrying vtjson's `__validate__` hook decides by it, wherever it
+  is written: a class holding the hook as any kind of method, an instance, and
+  an object whose `__getattr__` supplies it. The hook is asked first, so a
+  dataclass or a `NamedTuple` carrying one is read by it alone, and it is
+  called with the strictness in force. The layer read such a class as an
+  instance check, or crashed on an object answering every attribute.
 
 ## [0.0.1] - 2026-08-25
 
