@@ -100,14 +100,17 @@ def test_empty_dict_matches_only_the_empty_mapping() -> None:
     assert _vg({}, {"a": 1}) == _vt({}, {"a": 1})
 
 
-def test_dataclass_translates_structurally() -> None:
+def test_a_dataclass_is_the_instance_check_vtjson_reads() -> None:
     @dataclass
     class Point:
         x: int
         y: int
 
-    assert _vg(Point, Point(1, 2)) is True
-    assert _vg(Point, Point("a", 2)) is False  # ty: ignore[invalid-argument-type]
+    # vtjson asks `isinstance` alone, so a field holding another type is still
+    # an instance.
+    for value in (Point(1, 2), Point("a", 2), (1, 2)):  # ty: ignore[invalid-argument-type]
+        assert _vg(Point, value) == _vt(Point, value)
+    assert _vg(Point, Point("a", 2)) is True  # ty: ignore[invalid-argument-type]
 
 
 # --- Optional-dependency error path ------------------------------------------

@@ -72,8 +72,13 @@ the value, with the value's own class never consulted:
 | `NamedTuple` | a `tuple` subclass with `_fields` | a tuple, and those attributes |
 
 Everything else is an instance check, which is what vtjson gives a plain type.
-valgebra reads a dataclass and an enum the same way, so those translate
-directly. The three structural kinds are built here, because valgebra reads each
+valgebra reads an enum the same way, so it translates directly. A dataclass it
+reads as the class met with a record of its fields, so an instance whose field
+holds another type, or was never set, is no member there and is one in vtjson;
+the layer asks `isinstance` of a dataclass itself, through a predicate. That is
+a gap in what valgebra's frontend spells, not in its algebra: the instances of
+a dataclass, whatever its fields hold, are a class atom valgebra holds for any
+other class and builds for no dataclass. The three structural kinds are built here, because valgebra reads each
 of them differently: a `TypedDict` as the open set the typing spec assigns it --
 the declared keys beside any other `str` key, unless the class or a base it
 inherits from says `closed` or `extra_items` -- where vtjson reads a record that
@@ -85,11 +90,9 @@ member declared `ClassVar` or `Final` and a generic `Protocol[T]`, each of which
 vtjson decides.
 
 Where valgebra builds no validator for a class that is an instance check, the
-layer asks vtjson's `isinstance` itself. Two kinds reach that: the bare
-`typing.Union`, which from 3.14 is the class of every union object and which
-valgebra reads as the typing form, and a dataclass whose field annotations
-valgebra cannot read -- a type variable, a special form, a name that does not
-resolve. vtjson never reads the fields, so the answer does not either.
+layer asks vtjson's `isinstance` itself. The bare `typing.Union` reaches that:
+from 3.14 it is the class of every union object, and valgebra reads it as the
+typing form and refuses it.
 
 The consequence worth stating plainly: a `NamedTuple` schema is nothing like the
 instance check it resembles. A different `NamedTuple` declaring the same field

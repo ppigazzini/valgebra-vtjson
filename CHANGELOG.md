@@ -198,6 +198,10 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `SchemaError`, as vtjson refuses it: one needing two arguments, or none, or
   one only by keyword, and a `typing_extensions.TypeAliasType`, whose instances
   take none. The layer built a predicate that rejected every value.
+- A dataclass is the instance check vtjson reads, wherever it is written: an
+  instance belongs whatever its fields hold, a field of another type and one
+  never set among them. valgebra reads a dataclass with a record of its fields,
+  and the layer handed it over, refusing such an instance.
 
 ## [0.0.1] - 2026-08-25
 
