@@ -118,7 +118,8 @@ is a builtin. A `Mapping` subclass gives a mapping over the two arguments and a
 `Container` subclass a collection over the one, and the value must be an
 instance of the origin as well — so `Sequence[int]`, `Mapping[str, int]`,
 `deque[int]` and `OrderedDict[str, int]` all decide as they do in vtjson, and
-the wrong number of arguments is a `SchemaError` rather than a verdict. An
+the wrong number of arguments, on a builtin origin as on any other, is a
+`SchemaError` rather than a verdict. An
 origin that names neither kind falls back on vtjson's own rule for a schema it
 cannot place, which reads the form as an instance check if it answers to `type`,
 calls it if it is callable, and compares it otherwise: `P.args` admits the

@@ -202,6 +202,10 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   instance belongs whatever its fields hold, a field of another type and one
   never set among them. valgebra reads a dataclass with a record of its fields,
   and the layer handed it over, refusing such an instance.
+- A builtin generic carrying the wrong number of arguments -- `dict[int]`,
+  `list[int, str]`, `set[int, str]`, `frozenset[int, str]` -- is a
+  `SchemaError`, as vtjson raises it and as a foreign origin already was. The
+  layer let valgebra's `NotImplementedError` out.
 
 ## [0.0.1] - 2026-08-25
 

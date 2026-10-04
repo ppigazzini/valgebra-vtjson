@@ -714,6 +714,9 @@ def _translated_generic(
     restricted to the builtins, so `Sequence[int]` and `deque[int]` are schemas.
     """
     if origin in _PARAMETERISED:
+        kind = _COUNTED.get(origin)
+        if kind is not None:
+            _arguments(schema, kind)
         return _validator(
             _translated_alias(schema, origin, exact=exact, open_records=open_records)
         )
@@ -760,17 +763,11 @@ def _foreign_generic(
     atom beside it — as for a container schema written in a foreign class. A
     value that will not convert is not one the origin admits either.
     """
-    arguments = get_args(schema)
+    arguments = _arguments(schema, kind)
     if kind is dict:
-        if len(arguments) != _MAPPING_ARGUMENTS:
-            msg = "Number of arguments of mapping is not two"
-            raise SchemaError(msg)
         key, value = (_translate(item, open_records=open_records) for item in arguments)
         inner = _validator({key: value})
     else:
-        if len(arguments) != 1:
-            msg = "Number of arguments of Generic type is not one"
-            raise SchemaError(msg)
         element = _translate(arguments[0], open_records=open_records)
         inner = _validator([element, ...])
 
@@ -783,8 +780,29 @@ def _foreign_generic(
     return _intersect(_validator(origin), _predicate(check))
 
 
+def _arguments(schema: object, kind: type) -> tuple[object, ...]:
+    """Return a generic's arguments, refusing the wrong number as vtjson does.
+
+    vtjson reads a `Mapping` origin over two arguments and any other
+    `Container` origin over one, the builtins among them, and refuses the
+    schema otherwise. ``kind`` is the builtin the origin reads as.
+    """
+    arguments = get_args(schema)
+    if kind is dict and len(arguments) != _MAPPING_ARGUMENTS:
+        msg = "Number of arguments of mapping is not two"
+        raise SchemaError(msg)
+    if kind is not dict and len(arguments) != 1:
+        msg = "Number of arguments of Generic type is not one"
+        raise SchemaError(msg)
+    return arguments
+
+
 # A mapping generic carries its key and its value, and nothing else.
 _MAPPING_ARGUMENTS = 2
+
+# The builtin origins whose arguments vtjson counts, by the kind each reads as.
+# A tuple and a union take any number.
+_COUNTED = {dict: dict, list: list, set: list, frozenset: list}
 
 
 def _translated_alias(

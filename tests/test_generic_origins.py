@@ -122,6 +122,14 @@ ARITIES: list[tuple[str, Callable[[], object], str]] = [
     ("Counter[str]", lambda: Counter[str], "mapping"),
     ("Mapping[str]", lambda: abc.Mapping[str], "mapping"),  # ty: ignore[invalid-type-arguments]
     ("Sequence[int, str]", lambda: abc.Sequence[int, str], "Generic"),  # ty: ignore[invalid-type-arguments]
+    # The builtin origins are spelled the same way and refused the same way.
+    ("dict[int]", lambda: dict[int], "mapping"),  # ty: ignore[invalid-type-arguments]
+    ("dict[int, str, bytes]", lambda: dict[int, str, bytes], "mapping"),  # ty: ignore[invalid-type-arguments]
+    ("list[int, str]", lambda: list[int, str], "Generic"),  # ty: ignore[invalid-type-arguments]
+    ("list[int, ...]", lambda: list[int, ...], "Generic"),  # ty: ignore[invalid-type-arguments, invalid-type-form]
+    ("set[int, str]", lambda: set[int, str], "Generic"),  # ty: ignore[invalid-type-arguments]
+    ("frozenset[int, str]", lambda: frozenset[int, str], "Generic"),  # ty: ignore[invalid-type-arguments]
+    ("a dict[int] field", lambda: {"k": dict[int]}, "mapping"),  # ty: ignore[invalid-type-arguments]
 ]
 
 
