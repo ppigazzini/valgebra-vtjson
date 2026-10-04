@@ -264,6 +264,31 @@ def _predicate(check: object) -> CompiledValidator:
     return _validator(Annotated[object, check])
 
 
+def _constant(schema: object) -> CompiledValidator:
+    """Admit the values equal to ``schema``, which is vtjson's reading of a constant.
+
+    valgebra reads a constant as a literal of itself, but refuses the objects the
+    typing runtime builds to name a type rather than be one: a type variable, a
+    `ParamSpec` and its `args` and `kwargs`, a `TypeVarTuple`, a forward
+    reference. vtjson has no rule for any of them, so each is a constant there,
+    and a refusal let out here would raise where vtjson decides.
+    """
+    try:
+        return _validator(schema)
+    except NotImplementedError:
+        return _equal_to(schema)
+
+
+def _equal_to(schema: object) -> CompiledValidator:
+    """Admit a value unless it answers ``!=`` against ``schema``, as vtjson asks.
+
+    The question is vtjson's `!=` rather than `==`, since a value may answer the
+    two apart, and the predicate is the whole of the dynamic part: one object,
+    compared once.
+    """
+    return _predicate(lambda obj: not obj != schema)  # noqa: SIM202  (vtjson asks `!=`)
+
+
 def _nullary(
     func: Callable[..., CompiledValidator],
 ) -> Callable[..., CompiledValidator]:
@@ -583,7 +608,7 @@ def _translate_leaf(
     if isinstance(schema, float) and not exact:
         return _near(schema)
     # Anything else is an exact-value constant matched by equality.
-    return _validator(schema)
+    return _constant(schema)
 
 
 # The generics whose arguments are schemas. `Literal`'s are values, and a form
@@ -615,16 +640,29 @@ def _translated_generic(
     try:
         return _validator(schema)
     except NotImplementedError:
-        # An origin naming neither kind has no node to become, and vtjson has
-        # none either: it falls through to the rule for any other schema, which
-        # is an instance check for a class and a call for anything callable.
-        if isinstance(schema, type):
-            # A subscripted generic answers `isinstance(..., type)` before 3.11,
-            # and an instance check against one raises rather than deciding — so
-            # the schema admits nothing. vtjson's verdict on `type[int]` flips
-            # with the interpreter for exactly this reason.
-            return _complement(_validator(_anything))
+        return _unplaced(schema)
+
+
+def _unplaced(schema: object) -> CompiledValidator:
+    """Translate a subscripted generic whose origin has no node to become.
+
+    vtjson has none either: it falls through to the rule for any other schema,
+    which is an instance check for a class, a call for anything callable, and
+    equality for the rest.
+    """
+    if isinstance(schema, type):
+        # A subscripted generic answers `isinstance(..., type)` before 3.11, and
+        # an instance check against one raises rather than deciding — so the
+        # schema admits nothing. vtjson's verdict on `type[int]` flips with the
+        # interpreter for exactly this reason.
+        return _complement(_validator(_anything))
+    if callable(schema):
         return _predicate(schema)
+    # `P.args` and `P.kwargs` report `P` as their origin and are not callable,
+    # so each is a constant: equal to the `args` of that `P` and to nothing
+    # else. Read as a predicate, it is metadata valgebra drops, and the schema
+    # admits every value.
+    return _equal_to(schema)
 
 
 def _foreign_generic(

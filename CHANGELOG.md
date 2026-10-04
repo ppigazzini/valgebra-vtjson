@@ -168,6 +168,12 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `close_to` measures the numbers vtjson counts as numbers, so a `Decimal` is
   not one of them.
 - `Any` admits every value on every supported interpreter.
+- A type variable, a `ParamSpec`, a `TypeVarTuple` and a forward reference
+  written as a schema are constants, as in vtjson: each admits a value that
+  does not answer `!=` against it, wherever it is written, a `Protocol[T]`
+  member among them. Each raised `NotImplementedError` from valgebra, which
+  holds none of them as a literal. `P.args` and `P.kwargs` admit the `args` and
+  `kwargs` of that `P` and nothing else, where each admitted every value.
 
 ## [0.0.1] - 2026-08-25
 

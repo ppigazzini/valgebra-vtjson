@@ -44,6 +44,14 @@ calling one builds a container from the value rather than judging it:
 
 **A bare callable is a predicate over any value**, which is vtjson's convention.
 
+**Anything else is a constant**, as in vtjson, and valgebra holds most of them as
+a literal. It refuses the objects the typing runtime builds to name a type
+rather than be one: a type variable, a `ParamSpec` and its `args` and `kwargs`,
+a `TypeVarTuple`, a forward reference. vtjson reads each as a constant, so the
+layer asks the question vtjson asks, `value != schema`, of that one object.
+`P.args` reaches this rule from the generic arm below, since its origin is `P`:
+read as a predicate, it is metadata valgebra drops, and admits every value.
+
 ## A class is read by what kind of class it is
 
 Three kinds are **structural** — the hints the class declares, checked against
