@@ -21,6 +21,7 @@ and it cannot be fixed here.
 | `Union[x]` where `x` is not a type | `TypeError` | accepted in 3.11 |
 | `isinstance(Any, type)` | `False` | `True` in 3.11 |
 | `get_origin(X \| Y)` | `types.UnionType` | `typing.Union` in 3.14 |
+| `isinstance(typing.Union, type)` | `False` | `True` in 3.14 |
 
 ## What each one does if it is missed
 
@@ -36,6 +37,11 @@ and it cannot be fixed here.
 - **Two spellings of a union.** Recognising one origin and not the other leaves
   half the unions handed over whole, so laxness and translated arguments stop at
   them. Both spellings are listed.
+- **The bare `typing.Union` becoming a class.** From 3.14 it is
+  `types.UnionType`, so it reaches the class arm, which vtjson reads as an
+  instance check. valgebra reads the same object as the typing form and builds
+  nothing, so the class arm asks `isinstance` itself wherever valgebra builds no
+  validator, rather than letting the refusal out on one interpreter.
 
 ## Why reading the code does not find these
 

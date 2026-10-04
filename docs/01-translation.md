@@ -76,6 +76,13 @@ its getter's return annotation, neither of which is a hint, and it refuses a
 member declared `ClassVar` or `Final` and a generic `Protocol[T]`, each of which
 vtjson decides.
 
+Where valgebra builds no validator for a class that is an instance check, the
+layer asks vtjson's `isinstance` itself. Two kinds reach that: the bare
+`typing.Union`, which from 3.14 is the class of every union object and which
+valgebra reads as the typing form, and a dataclass whose field annotations
+valgebra cannot read -- a type variable, a special form, a name that does not
+resolve. vtjson never reads the fields, so the answer does not either.
+
 The consequence worth stating plainly: a `NamedTuple` schema is nothing like the
 instance check it resembles. A different `NamedTuple` declaring the same field
 belongs, and so does a wider one.

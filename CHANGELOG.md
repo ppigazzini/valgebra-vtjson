@@ -174,6 +174,11 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   member among them. Each raised `NotImplementedError` from valgebra, which
   holds none of them as a literal. `P.args` and `P.kwargs` admit the `args` and
   `kwargs` of that `P` and nothing else, where each admitted every value.
+- A class valgebra builds no validator for is the instance check vtjson reads,
+  wherever it is written: the bare `typing.Union` on 3.14, where it is the class
+  of every union object, and a dataclass whose field annotations valgebra
+  cannot read -- a type variable, a special form, a name that does not resolve.
+  Each raised from valgebra.
 
 ## [0.0.1] - 2026-08-25
 

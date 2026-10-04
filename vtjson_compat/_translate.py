@@ -790,10 +790,24 @@ def _translate_type(schema: type, *, open_records: bool = False) -> CompiledVali
     # differently, and `_typed_dict_record` says how.
     if is_typeddict(schema):
         return _typed_dict_record(schema, open_records=open_records)
+    return _instance_check(schema, open_records=open_records)
+
+
+def _instance_check(schema: type, *, open_records: bool) -> CompiledValidator:
+    """Translate a class vtjson reads as an instance check and nothing more."""
+    try:
+        built = _validator(schema)
+    except Exception:  # noqa: BLE001  (vtjson reads no part of a class valgebra could not)
+        # vtjson asks `isinstance` of the class and nothing else, so whatever
+        # valgebra cannot read in it decides nothing there. valgebra builds no
+        # node for the bare `typing.Union`, which from 3.14 is the class of
+        # every union object and which it reads as the typing form, nor for a
+        # dataclass whose field annotations it reads and cannot: a type
+        # variable, a special form, a name that does not resolve.
+        return _predicate(lambda obj: isinstance(obj, schema))
     # Laxness frees the keys a schema does not declare. `open` reaches a record
     # and nothing else, which is the whole rule: an instance check and an
     # attribute schema declare no key to free.
-    built = _validator(schema)
     return built.open() if open_records else built
 
 
