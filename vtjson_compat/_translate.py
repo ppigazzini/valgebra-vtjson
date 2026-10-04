@@ -7,6 +7,7 @@ meaning is expressed with the algebra so the accept/reject decision matches.
 """
 
 import importlib
+import inspect
 import math
 import threading
 import typing
@@ -263,6 +264,27 @@ def _typed_dict_record(schema: object, *, open_records: bool) -> CompiledValidat
 def _predicate(check: object) -> CompiledValidator:
     """Build a validator that admits a value iff ``check(value)`` is truthy."""
     return _validator(Annotated[object, check])
+
+
+def _called(schema: Callable[..., object]) -> CompiledValidator:
+    """Admit a value ``schema`` returns a truthy answer for, as vtjson does.
+
+    vtjson binds one argument to the callable's signature when it compiles the
+    schema, and refuses the schema where that fails: a callable needing two
+    arguments, or none, or one only by keyword. The question is vtjson's own,
+    so a signature `inspect` cannot read raises what it raises there.
+    """
+    try:
+        inspect.signature(schema).bind("test_value")
+    except TypeError:
+        msg = f"{_name(schema)!r} cannot be called with a single argument"
+        raise SchemaError(msg) from None
+    return _predicate(schema)
+
+
+def _name(schema: object) -> str:
+    """Return the name vtjson gives ``schema`` in a message."""
+    return str(getattr(schema, "__name__", schema))
 
 
 def _hooked(schema: object, *, open_records: bool) -> CompiledValidator:
@@ -666,7 +688,7 @@ def _translate_leaf(
             # A bare nullary construct, like vtjson's auto-instantiated bare class.
             return _translate(schema())
         # A bare callable is a predicate over any value (the vtjson convention).
-        return _validator(Annotated[object, schema])
+        return _called(schema)
     if isinstance(schema, float) and not exact:
         return _near(schema)
     # Anything else is an exact-value constant matched by equality.
@@ -719,7 +741,7 @@ def _unplaced(schema: object) -> CompiledValidator:
         # interpreter for exactly this reason.
         return _complement(_validator(_anything))
     if callable(schema):
-        return _predicate(schema)
+        return _called(schema)
     # `P.args` and `P.kwargs` report `P` as their origin and are not callable,
     # so each is a constant: equal to the `args` of that `P` and to nothing
     # else. Read as a predicate, it is metadata valgebra drops, and the schema

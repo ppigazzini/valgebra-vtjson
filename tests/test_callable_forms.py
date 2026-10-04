@@ -10,15 +10,22 @@ A `partial` is the one that separates the implementations. It carries its
 wrapped callable on `.func`, which is also how `annotated_types.Predicate`
 carries its own, so a reader that takes `.func` from whichever marker has one
 strips the partial of the arguments bound to it.
+
+The second axis is the callable's signature. vtjson binds one argument to it
+when the schema is compiled and refuses the schema with `SchemaError` where
+that fails: a callable needing two arguments, or none, or one only by keyword.
+A `typing_extensions.TypeAliasType` is one, a class of its own that is not
+`typing`'s and whose instances take no argument.
 """
 
 from __future__ import annotations
 
 import functools
 import operator
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Annotated, Any, NamedTuple
 
 import pytest
+import typing_extensions
 import vtjson as vt
 
 import vtjson_compat as vg
@@ -94,4 +101,118 @@ def test_a_callable_predicate_decides_as_vtjson_does(
     ]
     assert not divergences, f"{label}: " + ", ".join(
         f"{obj!r} vtjson={a} layer={b}" for obj, a, b in divergences
+    )
+
+
+def _two(value: object, other: object) -> bool:
+    return value == other
+
+
+def _none() -> bool:
+    return True
+
+
+def _keyword_only(*, value: object) -> bool:
+    return value == 1
+
+
+def _then_keyword(value: object, *, other: object) -> bool:
+    return value == other
+
+
+def _defaulted(value: object, other: object = 1) -> bool:
+    return value == other
+
+
+def _variadic(*values: object) -> bool:
+    return values == (1,)
+
+
+def _keywords(**values: object) -> bool:
+    return bool(values)
+
+
+_Alias = typing_extensions.TypeAliasType("_Alias", int)
+
+
+class _CalledBare:
+    """An object whose `__call__` takes no argument."""
+
+    def __call__(self) -> bool:
+        return True
+
+
+# Each signature, and whether vtjson can call it with one argument.
+SIGNATURES: list[tuple[str, object]] = [
+    ("two required", _two),
+    ("none", _none),
+    ("keyword-only", _keyword_only),
+    ("a required keyword after it", _then_keyword),
+    ("a default after it", _defaulted),
+    ("variadic positional", _variadic),
+    ("variadic keyword", _keywords),
+    ("__call__ taking none", _CalledBare()),
+    ("a partial binding every argument", functools.partial(_two, 1, 1)),
+    ("a partial leaving one", functools.partial(_two, 1)),
+    ("a lambda of two", lambda value, other: value == other),
+    ("a typing_extensions alias", _Alias),
+]
+
+
+class _Position(NamedTuple):
+    """A place a schema can put a callable, and how a probe reaches it."""
+
+    name: str
+    wrap: Callable[[Any, object], object]
+    lift: Callable[[object], object]
+
+
+POSITIONS = [
+    _Position("on its own", lambda _m, c: c, lambda v: v),
+    _Position("a record's field", lambda _m, c: {"k": c}, lambda v: {"k": v}),
+    _Position("a list element", lambda _m, c: [c], lambda v: [v]),
+    _Position("a dict key", lambda _m, c: {c: int}, lambda v: {v: 1}),
+    _Position("Annotated metadata", lambda _m, c: Annotated[object, c], lambda v: v),
+    _Position("a union's arm", lambda m, c: m.union(c, bytes), lambda v: v),
+    _Position("a lax record's field", lambda m, c: m.lax({"k": c}), lambda v: {"k": v}),
+]
+
+
+def _outcome(module: Any, build: Callable[[], object], obj: object) -> str:
+    """Return ``module``'s verdict, or that it refused the schema it was given.
+
+    The schema is built inside, since a wrapper may refuse it when it is written
+    rather than when a value arrives.
+    """
+    try:
+        module.validate(build(), obj)
+    except module.SchemaError:
+        return "SchemaError"
+    except module.ValidationError:
+        return "reject"
+    return "accept"
+
+
+@pytest.mark.parametrize("position", POSITIONS, ids=[p.name for p in POSITIONS])
+@pytest.mark.parametrize(
+    ("label", "predicate"), SIGNATURES, ids=[s[0] for s in SIGNATURES]
+)
+def test_a_callable_is_refused_where_vtjson_cannot_call_it_with_one_argument(
+    label: str,
+    predicate: object,
+    position: _Position,
+) -> None:
+    """The schema is refused, or decides, as vtjson's does."""
+    divergences = [
+        (probe, a, b)
+        for value in (1, 2, "x", None)
+        if (
+            a := _outcome(
+                vt, lambda: position.wrap(vt, predicate), probe := position.lift(value)
+            )
+        )
+        != (b := _outcome(vg, lambda: position.wrap(vg, predicate), probe))
+    ]
+    assert not divergences, f"{label} as {position.name}: " + ", ".join(
+        f"{probe!r} vtjson={a} layer={b}" for probe, a, b in divergences
     )

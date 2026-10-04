@@ -47,6 +47,10 @@ calling one builds a container from the value rather than judging it:
 `list[int]("a")` is `["a"]`, which a predicate reads as a pass.
 
 **A bare callable is a predicate over any value**, which is vtjson's convention.
+vtjson binds one argument to its signature when it compiles the schema and
+refuses the schema with `SchemaError` where that fails -- a callable needing two
+arguments, or none, or one only by keyword -- and `_called` asks the same, in
+the leaf and in the generic arm's fallback alike.
 
 **Anything else is a constant**, as in vtjson, and valgebra holds most of them as
 a literal. It refuses the objects the typing runtime builds to name a type

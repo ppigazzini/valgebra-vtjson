@@ -194,6 +194,10 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   as a predicate and judged a value by its truth, and an alias was read by
   valgebra's own rules, refusing `1` for `float`. An alias naming itself is a
   recursive schema.
+- A callable vtjson cannot call with one argument is refused with
+  `SchemaError`, as vtjson refuses it: one needing two arguments, or none, or
+  one only by keyword, and a `typing_extensions.TypeAliasType`, whose instances
+  take none. The layer built a predicate that rejected every value.
 
 ## [0.0.1] - 2026-08-25
 
