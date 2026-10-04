@@ -357,17 +357,17 @@ def fields(d: Mapping[str, object]) -> CompiledValidator:
         msg = f"the attributes {d!r} are not a Mapping"
         raise SchemaError(msg)
     names = [_text(name, "attribute name") for name in d]
-    return _deferred(
-        lambda *, open_records: _predicate(
-            lambda obj: _attributes_match(
-                {
-                    name: _translate(schema, open_records=open_records)
-                    for name, schema in zip(names, d.values(), strict=True)
-                },
-                obj,
-            )
-        )
-    )
+
+    def build(*, open_records: bool) -> CompiledValidator:
+        # Translated once, when the mode is known, and never per value: a schema
+        # vtjson refuses is refused here, rather than read as a rejection.
+        inner = {
+            name: _translate(schema, open_records=open_records)
+            for name, schema in zip(names, d.values(), strict=True)
+        }
+        return _predicate(lambda obj: _attributes_match(inner, obj))
+
+    return _deferred(build)
 
 
 def protocol(schema: object, dict: bool = False) -> CompiledValidator:  # noqa: A002, FBT001, FBT002

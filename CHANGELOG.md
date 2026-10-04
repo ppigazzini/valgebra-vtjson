@@ -206,6 +206,10 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `list[int, str]`, `set[int, str]`, `frozenset[int, str]` -- is a
   `SchemaError`, as vtjson raises it and as a foreign origin already was. The
   layer let valgebra's `NotImplementedError` out.
+- `fields` refuses a schema it carries that vtjson refuses, a callable of two
+  arguments or `dict[int]`, as vtjson does. It translated what it carries for
+  every value checked, so the refusal became a rejection of every value, and
+  each check paid for the translation.
 
 ## [0.0.1] - 2026-08-25
 

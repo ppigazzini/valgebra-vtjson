@@ -107,3 +107,44 @@ def test_a_malformed_argument_never_yields_a_constant_verdict(
         f"{label}: the layer built a schema that answers "
         f"{verdicts.pop()} for every probe"
     )
+
+
+def _two(value: object, other: object) -> bool:
+    return value == other
+
+
+# A construct carrying a schema vtjson refuses builds, and the refusal comes when
+# vtjson compiles what it carries. A layer that translates the carried schema
+# per value instead turns the refusal into a rejection of every value.
+CARRIED: list[tuple[str, Any]] = [
+    ("fields of a two-argument callable", lambda m: m.fields({"a": _two})),
+    ("fields of dict[int]", lambda m: m.fields({"a": dict[int]})),  # ty: ignore[invalid-type-arguments]
+    ("union of a two-argument callable", lambda m: m.union(_two, int)),
+    ("intersect of one", lambda m: m.intersect(_two, int)),
+    ("complement of one", lambda m: m.complement(_two)),
+    ("ifthen over one", lambda m: m.ifthen(int, _two)),
+    ("cond over one", lambda m: m.cond((int, _two))),
+    ("filter into one", lambda m: m.filter(len, _two)),
+    ("set_name of one", lambda m: m.set_name(_two, "n")),
+]
+
+
+def _refused(module: Any, build: Any) -> bool:
+    """Whether ``module`` refuses the schema, when it is written or validated."""
+    try:
+        module.validate(build(module), 1)
+    except module.SchemaError:
+        return True
+    except module.ValidationError:
+        return False
+    return False
+
+
+@pytest.mark.parametrize(("label", "build"), CARRIED, ids=[c[0] for c in CARRIED])
+def test_a_schema_a_construct_carries_is_refused_as_vtjson_refuses_it(
+    label: str,
+    build: Any,
+) -> None:
+    """The carried schema is refused, never turned into a rejection."""
+    assert _refused(vt, build), f"vtjson builds {label}"
+    assert _refused(vg, build), f"{label}: vtjson raises SchemaError, the layer not"
