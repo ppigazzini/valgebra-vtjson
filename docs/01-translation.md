@@ -13,7 +13,9 @@ what a schema means.
 The arms, in order: a schema that is already a validator — one built, or a
 construct waiting only for a mode — returns itself; an object carrying vtjson's
 `__validate__` hook decides by it, called with the strictness in force, ahead
-of every reading of a class, as vtjson asks it; `None`; `Any`; a class; the
+of every reading of a class, as vtjson asks it; `None`; `Any`; a `NewType` or a
+`typing.TypeAliasType`, read as the schema it names by vtjson's rules rather
+than handed to valgebra, which would read that schema by its own; a class; the
 four builtin container literals (`dict`, `list`, `tuple`, set); a container
 written in some other class; anything else, which is a leaf.
 

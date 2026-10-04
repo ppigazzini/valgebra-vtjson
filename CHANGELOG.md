@@ -188,6 +188,12 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   dataclass or a `NamedTuple` carrying one is read by it alone, and it is
   called with the strictness in force. The layer read such a class as an
   instance check, or crashed on an object answering every attribute.
+- A `NewType` and a `typing.TypeAliasType` are the schema they name, read by
+  vtjson's rules, wherever they are written: a `NewType` of `float` admits `1`,
+  of `{"a?": int}` admits `{}`, of `ge(0)` refuses `-1`. A `NewType` was called
+  as a predicate and judged a value by its truth, and an alias was read by
+  valgebra's own rules, refusing `1` for `float`. An alias naming itself is a
+  recursive schema.
 
 ## [0.0.1] - 2026-08-25
 

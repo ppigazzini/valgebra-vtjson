@@ -9,6 +9,7 @@ meaning is expressed with the algebra so the accept/reject decision matches.
 import importlib
 import math
 import threading
+import typing
 from collections import UserString
 from collections.abc import Callable, Container, Mapping, Sequence
 from collections.abc import Set as AbstractSet
@@ -551,12 +552,9 @@ def _translate(
     itself = _deciding_itself(schema, open_records=open_records)
     if itself is not None:
         return itself
-    if schema is None:
-        return _validator(None)
-    if schema is Any:
-        # vtjson names `Any` outright and admits everything. Before 3.11 it is
-        # not a class, so the branch below does not catch it.
-        return _validator(_anything)
+    named = _named_outright(schema, exact=exact, open_records=open_records)
+    if named is not None:
+        return named
     if isinstance(schema, type) and get_origin(schema) is None:
         # A subscripted builtin generic answers `isinstance(..., type)` before
         # 3.11, so asking that alone reads `dict[str, int]` as a class and hands
@@ -568,6 +566,47 @@ def _translate(
             schema, container, exact=exact, open_records=open_records
         )
     return _translate_leaf(schema, exact=exact, open_records=open_records)
+
+
+def _named_outright(
+    schema: object, *, exact: bool, open_records: bool
+) -> CompiledValidator | None:
+    """Translate a schema vtjson recognises by what it is, or return `None`.
+
+    vtjson asks these before what kind of thing a schema is. A `NewType` --
+    anything carrying `__name__` and `__supertype__` -- and a `TypeAliasType`
+    each stand for another schema, and vtjson reads the name as that schema by
+    its own rules: a `float` admitting an `int`, an optional `"a?"` key. Handed
+    to valgebra, the name is read by valgebra's rules, or called, which judges
+    a `NewType`'s value by its truth.
+    """
+    if schema is None:
+        return _validator(None)
+    if schema is Any:
+        # vtjson names `Any` outright and admits everything. Before 3.11 it is
+        # not a class, so the class arm does not catch it.
+        return _validator(_anything)
+    if hasattr(schema, "__name__") and hasattr(schema, "__supertype__"):
+        attribute = "__supertype__"
+    elif _TYPE_ALIAS is not None and isinstance(schema, _TYPE_ALIAS):
+        attribute = "__value__"
+    else:
+        return None
+
+    def named(schema: object, *, open_records: bool) -> CompiledValidator:
+        return _translate(
+            getattr(schema, attribute), exact=exact, open_records=open_records
+        )
+
+    # A `type` statement may name itself, and is then a recursive schema, as a
+    # container that holds itself is: the name is the back edge.
+    return _translate_container(schema, named, exact=exact, open_records=open_records)
+
+
+# vtjson recognises `typing`'s alias class alone, which exists from 3.12.
+# `typing_extensions` defines a class of its own on every supported release,
+# and vtjson reads one as a callable.
+_TYPE_ALIAS: type | None = getattr(typing, "TypeAliasType", None)
 
 
 def _foreign_kind(schema: object) -> type | None:
@@ -1071,6 +1110,7 @@ def _is_key_schema(key: object) -> bool:
         isinstance(key, type | CompiledValidator | _Deferred | tuple | frozenset)
         or callable(key)
         or hasattr(key, "__validate__")
+        or (_TYPE_ALIAS is not None and isinstance(key, _TYPE_ALIAS))
     )
 
 
