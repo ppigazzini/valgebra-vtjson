@@ -88,7 +88,9 @@ declares positions the way a record declares keys, so a lax `[int, str]` checks
 those two and admits whatever follows them, and a `TypedDict` declares keys the
 same way. A class that declares nothing — an instance check, an enum — has no
 undeclared member for laxness to free. A record's named fields and its typed catch-all are
-clauses either way, so neither mode discards them. Nesting follows vtjson too —
+clauses either way, so neither mode discards them. Laxness stops at a set, as in
+vtjson, which validates every member strictly: a lax `{(int,)}` refuses
+`{(1, 2)}`. Nesting follows vtjson too —
 each wrapper builds a validator, and an enclosing wrapper cannot reach inside
 one, so the innermost mode stands.
 

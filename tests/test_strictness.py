@@ -158,6 +158,75 @@ def test_laxness_frees_the_positions_a_sequence_does_not_declare(
     )
 
 
+# vtjson validates a set's members strictly whatever mode is in force, so
+# laxness stops at the set: a member's own undeclared positions stay refused.
+# A member must hash, so a fixed-length tuple is the member that has positions
+# to free.
+SET_MEMBERS: list[object] = [
+    set(),
+    {(1,)},
+    {(1, 2)},
+    {(1,), (1, 2)},
+    {(1, "a")},
+    {("a", "b", "c")},
+    {1},
+    frozenset({(1, 2)}),
+]
+
+SET_ROWS: list[tuple[str, Callable[[Any], object], list[object]]] = [
+    ("lax of a set of a fixed tuple", lambda m: m.lax({(int,)}), SET_MEMBERS),
+    ("lax of a set of two tuples", lambda m: m.lax({(int,), (str, str)}), SET_MEMBERS),
+    (
+        "lax of a frozenset of a fixed tuple",
+        lambda m: m.lax(frozenset({(int,)})),
+        [frozenset(member) for member in SET_MEMBERS if isinstance(member, set)],
+    ),
+    (
+        "a set inside a lax record",
+        lambda m: m.lax({"s": {(int,)}}),
+        [{"s": member} for member in SET_MEMBERS],
+    ),
+    (
+        "a set inside a lax list",
+        lambda m: m.lax([{(int,)}, ...]),
+        [[member] for member in SET_MEMBERS],
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    ("label", "build", "objects"), SET_ROWS, ids=[r[0] for r in SET_ROWS]
+)
+def test_strictness_stops_at_a_sets_members(
+    label: str,
+    build: Callable[[Any], object],
+    objects: list[object],
+) -> None:
+    """A member is validated strictly, as vtjson validates it, under any mode."""
+    reference, layer = build(vt), build(vg)
+    divergences = [
+        (obj, a, b)
+        for obj in objects
+        if (a := _decide(vt, reference, obj)) != (b := _decide(vg, layer, obj))
+    ]
+    assert not divergences, f"{label}: " + ", ".join(
+        f"{obj!r} vtjson={a} layer={b}" for obj, a, b in divergences
+    )
+
+
+def test_the_validate_flag_stops_at_a_sets_members_too() -> None:
+    """``validate(strict=False)`` reaches the set and not what it holds."""
+    divergences = [
+        (obj, a, b)
+        for obj in SET_MEMBERS
+        if (a := _decide(vt, {(int,)}, obj, strict=False))
+        != (b := _decide(vg, {(int,)}, obj, strict=False))
+    ]
+    assert not divergences, ", ".join(
+        f"{obj!r} vtjson={a} layer={b}" for obj, a, b in divergences
+    )
+
+
 class _Point(NamedTuple):
     a: int
 

@@ -179,6 +179,9 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   of every union object, and a dataclass whose field annotations valgebra
   cannot read -- a type variable, a special form, a name that does not resolve.
   Each raised from valgebra.
+- Laxness stops at a set, as in vtjson, which validates every member strictly
+  whatever mode is in force: a lax `{(int,)}` refuses `{(1, 2)}`, where the
+  layer freed the member tuple's undeclared positions and admitted it.
 
 ## [0.0.1] - 2026-08-25
 

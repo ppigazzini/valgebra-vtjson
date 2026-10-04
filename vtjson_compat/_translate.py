@@ -884,7 +884,11 @@ def _translate_set(
     # matches only the empty set. valgebra expresses each as a set of the union
     # of the element schemas (an empty union is the uninhabited element type, so
     # `set()` becomes the set whose only member is the empty set).
-    element = _union(*(_translate(item, open_records=open_records) for item in schema))
+    #
+    # vtjson validates every member strictly whatever mode is in force, so
+    # laxness stops at the set and a member's undeclared positions stay refused.
+    del open_records
+    element = _union(*(_translate(item) for item in schema))
     return _of_own_class(schema, _validator(set[element]))  # ty: ignore[invalid-type-form]
 
 
