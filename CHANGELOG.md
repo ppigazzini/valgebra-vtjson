@@ -210,6 +210,10 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   arguments or `dict[int]`, as vtjson does. It translated what it carries for
   every value checked, so the refusal became a rejection of every value, and
   each check paid for the translation.
+- `lax`, `strict` and `set_label` refuse a schema they carry when it is
+  validated, as vtjson refuses it, rather than when the wrapper is called. A
+  schema written at import and validated later fails at the same line under
+  both. Each still settles its own mode, so the innermost wrapper decides.
 
 ## [0.0.1] - 2026-08-25
 

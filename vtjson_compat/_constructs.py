@@ -411,13 +411,29 @@ def set_label(schema: object, *labels: str, debug: bool = False) -> CompiledVali
 
     Strictness stops here. vtjson validates the labelled schema strictly whatever
     the ambient flag says, so an enclosing ``lax`` does not reach the record
-    inside, and neither does ``validate(strict=False)``. Deferring would let it
-    through, which is why this settles the mode rather than carrying it.
+    inside, and neither does ``validate(strict=False)``. The mode is settled
+    rather than carried; the translation waits for the schema to be compiled,
+    and the labels are checked now, as vtjson checks them.
     """
     for label in labels:
         _text(label, "label")
     del labels, debug
-    return _translate(schema)
+    return _deferred(_in_own_mode(schema, open_records=False))
+
+
+def _in_own_mode(
+    schema: object, *, open_records: bool
+) -> Callable[..., CompiledValidator]:
+    """Return a build translating ``schema`` under ``open_records`` alone.
+
+    The ambient mode a `_Deferred` hands its build is dropped: a wrapper's own
+    mode is the innermost one, and vtjson's innermost wrapper decides.
+    """
+
+    def build(**_ambient: bool) -> CompiledValidator:
+        return _translate(schema, open_records=open_records)
+
+    return build
 
 
 def make_type(
@@ -459,8 +475,12 @@ def lax(schema: object) -> CompiledValidator:
     Laxness settles only what happens to an *unclaimed* key. A record's named
     fields and its typed catch-all are clauses either way, so both still decide
     the keys they claim.
+
+    The mode is settled here, so an enclosing wrapper's does not reach inside,
+    and the translation waits for the schema to be compiled, as vtjson's does:
+    a schema vtjson refuses is refused then, not when `lax` is called.
     """
-    return _translate(schema, open_records=True)
+    return _deferred(_in_own_mode(schema, open_records=True))
 
 
 def strict(schema: object) -> CompiledValidator:
@@ -469,6 +489,7 @@ def strict(schema: object) -> CompiledValidator:
     That is what a translated schema already denotes, so this is the identity on
     a spec. It is not the identity on an already-built validator: a validator
     carries the mode it was built with, and vtjson's innermost wrapper is the one
-    that decides.
+    that decides. The translation waits for the schema to be compiled, as `lax`
+    says.
     """
-    return _translate(schema)
+    return _deferred(_in_own_mode(schema, open_records=False))

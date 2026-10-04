@@ -150,16 +150,18 @@ returns a `_Deferred` — everything it needs except the mode — and `_translat
 supplies the mode when one is known. A construct used on its own still answers
 as a validator, from a strict build.
 
-Two things stay eager, and for different reasons:
+**Argument checks stay eager.** A construct refuses malformed arguments when
+the schema is written, not when a value arrives. Deferring the whole body would
+move a `SchemaError` off the construction path, which is the guarantee the
+check exists for. What a construct *carries* is the other way round: vtjson
+refuses it when it compiles the schema, so a carried schema vtjson refuses is
+refused when the schema is validated, under every construct and wrapper alike.
 
-- **Argument checks.** A construct refuses malformed arguments when the schema
-  is written, not when a value arrives. Deferring the whole body would move a
-  `SchemaError` off the construction path, which is the guarantee the check
-  exists for.
-- **`set_label`.** vtjson validates a labelled schema strictly whatever the
-  ambient flag says, so an enclosing `lax` does not reach the record inside and
-  neither does `validate(strict=False)`. It settles the mode rather than
-  carrying it.
+**`lax`, `strict` and `set_label` settle the mode rather than carry it.** Each
+is deferred like any construct and builds with its own mode whatever it is
+handed, so the innermost wrapper decides. vtjson validates a labelled schema
+strictly whatever the ambient flag says, so an enclosing `lax` does not reach
+the record inside and neither does `validate(strict=False)`.
 
 A `_Deferred` is also a schema when it appears as a *dict key*, where the
 question is whether a key constrains other keys or is one. It constrains, the

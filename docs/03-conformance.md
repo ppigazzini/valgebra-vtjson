@@ -92,7 +92,7 @@ undeclared member for laxness to free. A record's named fields and its typed cat
 clauses either way, so neither mode discards them. Laxness stops at a set, as in
 vtjson, which validates every member strictly: a lax `{(int,)}` refuses
 `{(1, 2)}`. Nesting follows vtjson too —
-each wrapper builds a validator, and an enclosing wrapper cannot reach inside
+each wrapper settles its own mode, and an enclosing wrapper cannot reach inside
 one, so the innermost mode stands.
 
 A schema that contains itself is a recursive schema, as in vtjson: a dict whose

@@ -132,8 +132,9 @@ class _Deferred:
     was called would have settled a mode already, and the enclosing wrapper
     would have nothing left to reach.
 
-    Only `lax` and `strict` settle it, which is why they return a built
-    validator and this does not.
+    `lax`, `strict` and `set_label` are deferred as well, and each settles the
+    mode by building with its own whatever it is handed, so the innermost
+    wrapper decides and the translation still waits, as vtjson's compile does.
 
     Every validator attribute is served from a strict build, so a construct used
     on its own is a validator like any other.

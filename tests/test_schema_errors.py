@@ -148,3 +148,40 @@ def test_a_schema_a_construct_carries_is_refused_as_vtjson_refuses_it(
     """The carried schema is refused, never turned into a rejection."""
     assert _refused(vt, build), f"vtjson builds {label}"
     assert _refused(vg, build), f"{label}: vtjson raises SchemaError, the layer not"
+
+
+def _when(module: Any, build: Any) -> str:
+    """Return when ``module`` refuses the schema: written, validated, or never."""
+    try:
+        schema = build(module)
+    except module.SchemaError:
+        return "when written"
+    try:
+        module.validate(schema, 1)
+    except module.SchemaError:
+        return "when validated"
+    except module.ValidationError:
+        return "never"
+    return "never"
+
+
+# vtjson refuses a construct's own malformed argument when the construct is
+# called, and what a wrapper carries when the schema is compiled. A program that
+# writes its schemas at import and validates later fails at the same line under
+# both, or it is not a drop-in.
+TIMED: list[tuple[str, Any]] = [
+    *CARRIED,
+    ("lax of a two-argument callable", lambda m: m.lax({"k": _two})),
+    ("strict of one", lambda m: m.strict({"k": _two})),
+    ("set_label of one", lambda m: m.set_label({"k": _two}, "L")),
+    ("lax of dict[int]", lambda m: m.lax({"k": dict[int]})),  # ty: ignore[invalid-type-arguments]
+    ("lax inside strict", lambda m: m.strict(m.lax({"k": _two}))),
+    ("lax of a malformed bound", lambda m: m.lax({"k": m.gt(None)})),
+    ("set_label of a malformed label", lambda m: m.set_label(int, 5)),
+]
+
+
+@pytest.mark.parametrize(("label", "build"), TIMED, ids=[t[0] for t in TIMED])
+def test_a_refusal_comes_when_vtjson_raises_it(label: str, build: Any) -> None:
+    """The schema is refused at the moment vtjson refuses it."""
+    assert _when(vg, build) == _when(vt, build), label
