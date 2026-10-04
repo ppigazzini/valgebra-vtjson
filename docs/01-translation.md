@@ -62,8 +62,11 @@ of them differently: a `TypedDict` as the open set the typing spec assigns it --
 the declared keys beside any other `str` key, unless the class or a base it
 inherits from says `closed` or `extra_items` -- where vtjson reads a record that
 refuses a key the declaration does not name; a `NamedTuple` as a nominal atom;
-and a `Protocol` by `isinstance`, which asks only whether an attribute is present
-rather than what it holds.
+and a `Protocol` as the record of every member the class declares, where vtjson
+reads the hints alone. valgebra holds a method to a callable and a property to
+its getter's return annotation, neither of which is a hint, and it refuses a
+member declared `ClassVar` or `Final` and a generic `Protocol[T]`, each of which
+vtjson decides.
 
 The consequence worth stating plainly: a `NamedTuple` schema is nothing like the
 instance check it resembles. A different `NamedTuple` declaring the same field

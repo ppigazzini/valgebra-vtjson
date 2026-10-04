@@ -8,6 +8,25 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- valgebra 0.0.16 or later. No membership the layer asks about changes, so
+  every verdict is the one it already reached: 632 rows pass on 3.11 through
+  the newest interpreter and on the free-threaded build, 630 on the floor,
+  against the pinned oracle. valgebra reads a `Protocol` as the record of every
+  member it declares, a method and a property among them, where it read an
+  `isinstance` check; vtjson reads the type hints alone, and the layer builds
+  a `Protocol` schema from the hints itself, so no verdict here turns on it.
+  The release's two fixes are a relation the layer does not ask and the
+  explaining pass of a union's record and class branches, which runs only for
+  a value the union refuses: `validate` admits a member of a union with a
+  dataclass branch without running the value's `__repr__`, where it ran it once
+  for each such branch before the one that matched. A union of dict schemas
+  ran none before and runs none now.
+
+    `docs/06-performance.md` is measured on it, against 0.0.15 interleaved in
+    the same session: a mapping and a heterogeneous mapping read a third
+    faster, 42 and 65 times vtjson's speed where they read 27 and 44, and a
+    `[int, ...]` of ten thousand 4 to 14% faster.
+
 - valgebra 0.0.15 or later. No membership the layer asks about changes, so
   every verdict is the one it already reached: 629 rows pass on 3.11 through
   the newest interpreter and on the free-threaded build, 627 on the floor,

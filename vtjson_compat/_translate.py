@@ -732,6 +732,10 @@ def _translate_type(schema: type, *, open_records: bool = False) -> CompiledVali
         # A Protocol names attributes and their types, and vtjson checks both
         # without an instance check. `runtime_checkable` decides nothing here: it
         # governs `isinstance`, which only asks whether an attribute is present.
+        # valgebra reads the class as the record of every member it declares,
+        # holding a method to a callable and a property to its getter's return
+        # annotation, and refuses a `ClassVar` member; vtjson reads the type
+        # hints alone, so the attribute schema is built from those here.
         return _structural(schema, as_dict=False, open_records=open_records)
     if issubclass(schema, tuple) and hasattr(schema, "_fields"):
         # A NamedTuple is a tuple whose hints describe its attributes, and vtjson
