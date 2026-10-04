@@ -43,7 +43,7 @@ dev = [
     "pytest>=9.1.1",
     "pytest-cov>=7.1.0",
     "tomli>=2.4.1; python_version < '3.11'",
-    "ruff>=0.16.9",
+    "ruff>=0.16.10",
     "ty>=0.0.84",
     # Pinned, not floored: the differential suite is a claim about one
     # oracle version, and a floor makes that claim unreproducible.
