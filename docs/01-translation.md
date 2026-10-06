@@ -75,14 +75,15 @@ the value, with the value's own class never consulted:
 | `Protocol` | `_is_protocol` | an object whose attributes match the hints |
 | `NamedTuple` | a `tuple` subclass with `_fields` | a tuple, and those attributes |
 
-Everything else is an instance check, which is what vtjson gives a plain type.
-valgebra reads an enum the same way, so it translates directly. A dataclass it
-reads as the class met with a record of its fields, so an instance whose field
-holds another type, or was never set, is no member there and is one in vtjson;
-the layer asks `isinstance` of a dataclass itself, through a predicate. That is
-a gap in what valgebra's frontend spells, not in its algebra: the instances of
-a dataclass, whatever its fields hold, are a class atom valgebra holds for any
-other class and builds for no dataclass. The three structural kinds are built here, because valgebra reads each
+Everything else is an instance check, which is what vtjson gives a plain type,
+and `instance_of` is that set in valgebra: the class's instances, whatever their
+fields hold. `Validator` would read a dataclass as the class met with a record
+of its fields, so an instance whose field holds another type, or was never set,
+is no member there and is one in vtjson. A class valgebra cannot read at all --
+the bare `typing.Union`, which from 3.14 is the class of every union object --
+is asked `isinstance` through a predicate.
+
+The three structural kinds are built here, because valgebra reads each
 of them differently: a `TypedDict` as the open set the typing spec assigns it --
 the declared keys beside any other `str` key, unless the class or a base it
 inherits from says `closed` or `extra_items` -- where vtjson reads a record that

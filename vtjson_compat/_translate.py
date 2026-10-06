@@ -6,7 +6,6 @@ valgebra's native frontend (lists, ``float``), and where vtjson is lax the lax
 meaning is expressed with the algebra so the accept/reject decision matches.
 """
 
-import dataclasses
 import importlib
 import inspect
 import math
@@ -35,6 +34,9 @@ from ._valgebra_api import (
 )
 from ._valgebra_api import (
     fixed_sequence as _fixed_sequence,
+)
+from ._valgebra_api import (
+    instance_of as _instance_of,
 )
 from ._valgebra_api import (
     intersect as _intersect,
@@ -884,32 +886,25 @@ def _translate_type(schema: type, *, open_records: bool = False) -> CompiledVali
     # differently, and `_typed_dict_record` and `_instance_check` say how.
     if is_typeddict(schema):
         return _typed_dict_record(schema, open_records=open_records)
-    return _instance_check(schema, open_records=open_records)
+    return _instance_check(schema)
 
 
-def _instance_check(schema: type, *, open_records: bool) -> CompiledValidator:
+def _instance_check(schema: type) -> CompiledValidator:
     """Translate a class vtjson reads as an instance check and nothing more.
 
-    valgebra reads a dataclass as the class met with a record of its fields, so
-    an instance whose field holds another type, or was never set, is not a
-    member there and is one in vtjson. Its frontend has no spelling for the
-    class alone, so a dataclass is asked `isinstance` here, and a set valgebra
-    can hold -- the class's instances -- is reached through a predicate.
+    `instance_of` is that set in valgebra: the class's instances, whatever their
+    fields hold. `Validator` would read a dataclass as the class met with a
+    record of its fields, where an instance whose field holds another type, or
+    was never set, is no member; vtjson admits it.
     """
-    if dataclasses.is_dataclass(schema):
-        return _predicate(lambda obj: isinstance(obj, schema))
     try:
-        built = _validator(schema)
+        return _instance_of(schema)
     except Exception:  # noqa: BLE001  (vtjson reads no part of a class valgebra could not)
         # vtjson asks `isinstance` of the class and nothing else, so whatever
         # valgebra cannot read in it decides nothing there. valgebra builds no
         # node for the bare `typing.Union`, which from 3.14 is the class of
         # every union object and which it reads as the typing form.
         return _predicate(lambda obj: isinstance(obj, schema))
-    # Laxness frees the keys a schema does not declare. `open` reaches a record
-    # and nothing else, which is the whole rule: an instance check and an
-    # attribute schema declare no key to free.
-    return built.open() if open_records else built
 
 
 # The plain builtins carry no demand beyond their kind. Any other class a
