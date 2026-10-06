@@ -41,6 +41,11 @@ The aliases also let the rest of the package read in vtjson's vocabulary while
 the algebra keeps its own — `union` is valgebra's, `_union` is what the
 translator calls it.
 
+How a bound is written to valgebra belongs to the same file. valgebra reads a
+constraint off the `annotated_types` vocabulary and no other, so `refined`
+builds every bound -- `ge`, `lt`, `min_length` and the rest -- as that
+vocabulary's marker, and `annotated-types` is a runtime dependency for it.
+
 ## Build it out of valgebra
 
 The translation is the design. Where vtjson is lax, the lax meaning is expressed

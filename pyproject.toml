@@ -24,7 +24,7 @@ classifiers = [
     "Topic :: Software Development :: Quality Assurance",
     "Typing :: Typed",
 ]
-dependencies = ["valgebra>=0.0.16"]
+dependencies = ["annotated-types>=0.8", "valgebra>=0.0.17"]
 
 [project.optional-dependencies]
 # The network format validators (email, domain_name) reuse the same engines the

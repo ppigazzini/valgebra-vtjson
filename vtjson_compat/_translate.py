@@ -105,24 +105,6 @@ def _number(value: object, role: str) -> int | float:
     return value
 
 
-class _Marker:
-    """A structural refinement marker.
-
-    valgebra's frontend reads annotated-types-style markers by attribute
-    (``ge``/``gt``/``le``/``lt``/``min_length``/``max_length``), so an instance
-    carrying only the relevant attributes contributes exactly those constraints
-    without any runtime dependency on ``annotated_types``.
-    """
-
-    def __init__(self, **bounds: object) -> None:
-        self.__dict__.update(bounds)
-
-
-def _refine(marker: _Marker) -> CompiledValidator:
-    """Build a validator for ``object`` narrowed by one refinement marker."""
-    return _validator(Annotated[object, marker])
-
-
 class _Deferred:
     """A construct holding what it needs to translate, but not the mode.
 
@@ -281,7 +263,15 @@ def _called(schema: Callable[..., object]) -> CompiledValidator:
     except TypeError:
         msg = f"{_name(schema)!r} cannot be called with a single argument"
         raise SchemaError(msg) from None
-    return _predicate(schema)
+
+    # valgebra calls a callable in metadata, except a typing form, which it
+    # reads as metadata it does not recognise and ignores. vtjson calls every
+    # callable schema, `Iterable[int]` and a generic alias included, so the
+    # call is made through a function of this module, which valgebra calls.
+    def called(obj: object) -> object:
+        return schema(obj)
+
+    return _predicate(called)
 
 
 def _name(schema: object) -> str:

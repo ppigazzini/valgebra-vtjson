@@ -18,11 +18,9 @@ from ._translate import (
     _bound,
     _deferred,
     _integer,
-    _Marker,
     _nullary,
     _number,
     _predicate,
-    _refine,
     _structural,
     _text,
     _translate,
@@ -30,6 +28,7 @@ from ._translate import (
 from ._valgebra_api import (
     CompiledValidator,
     anything,
+    refined,
 )
 from ._valgebra_api import (
     complement as _complement,
@@ -49,22 +48,22 @@ from ._valgebra_api import (
 
 def gt(lb: object) -> CompiledValidator:
     """Values strictly greater than ``lb``."""
-    return _refine(_Marker(gt=_bound(lb, "lower")))
+    return refined(gt=_bound(lb, "lower"))
 
 
 def ge(lb: object) -> CompiledValidator:
     """Values greater than or equal to ``lb``."""
-    return _refine(_Marker(ge=_bound(lb, "lower")))
+    return refined(ge=_bound(lb, "lower"))
 
 
 def lt(ub: object) -> CompiledValidator:
     """Values strictly less than ``ub``."""
-    return _refine(_Marker(lt=_bound(ub, "upper")))
+    return refined(lt=_bound(ub, "upper"))
 
 
 def le(ub: object) -> CompiledValidator:
     """Values less than or equal to ``ub``."""
-    return _refine(_Marker(le=_bound(ub, "upper")))
+    return refined(le=_bound(ub, "upper"))
 
 
 def interval(
@@ -92,7 +91,7 @@ def interval(
         except TypeError as exc:
             msg = f"the bounds {lb!r} and {ub!r} do not support comparison"
             raise SchemaError(msg) from exc
-    return _refine(_Marker(**bounds))
+    return refined(**bounds)
 
 
 def size(lb: int, ub: int | EllipsisType | None = None) -> CompiledValidator:
@@ -114,7 +113,7 @@ def size(lb: int, ub: int | EllipsisType | None = None) -> CompiledValidator:
             msg = f"the lower size bound {low} is bigger than the upper bound {high}"
             raise SchemaError(msg)
         bounds["max_length"] = high
-    return _refine(_Marker(**bounds))
+    return refined(**bounds)
 
 
 def union(*schemas: object) -> CompiledValidator:

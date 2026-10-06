@@ -38,8 +38,9 @@ each is a rule vtjson applies that a naive reading misses:
 reads whatever is written in the metadata as a schema that *constrains* the
 value: a construct, and a constant, a mapping, a class or a sequence as well.
 valgebra reads the metadata by its own protocol, where a compiled validator, or
-a callable that is not a class, meets the base, and a constant, a mapping, a
-class or a sequence is metadata it drops. So the layer translates each item as
+a callable that is neither a class nor a typing form, meets the base, and a
+constant, a mapping, a class, a typing form or a sequence is metadata it
+drops. So the layer translates each item as
 a schema, under the base's strictness, and the value meets every one.
 
 **A subscripted generic is a schema, not a callable.** Several are callable, and
@@ -50,7 +51,10 @@ calling one builds a container from the value rather than judging it:
 vtjson binds one argument to its signature when it compiles the schema and
 refuses the schema with `SchemaError` where that fails -- a callable needing two
 arguments, or none, or one only by keyword -- and `_called` asks the same, in
-the leaf and in the generic arm's fallback alike.
+the leaf and in the generic arm's fallback alike. vtjson calls every callable
+schema, and valgebra does not call a typing form: it reads `Iterable[int]` or a
+generic alias in metadata as metadata it ignores, which admits every value.
+So `_called` hands valgebra a function of its own that makes vtjson's call.
 
 **Anything else is a constant**, as in vtjson, and valgebra holds most of them as
 a literal. It refuses the objects the typing runtime builds to name a type
@@ -209,4 +213,7 @@ raises `SchemaError`, as it does in vtjson.
 The check is not cosmetic. A bound valgebra cannot read contributes no
 constraint, so the refinement would widen to **every** value rather than
 narrowing — a schema that silently stops enforcing is worse than one that
-refuses to build.
+refuses to build. The same holds of how a bound is written: valgebra reads a
+constraint off the `annotated_types` vocabulary alone and ignores a marker of
+any other class, whatever attributes it carries, so `refined` in
+`_valgebra_api.py` writes every bound as that vocabulary's marker.

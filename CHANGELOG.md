@@ -8,6 +8,23 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- valgebra 0.0.17 or later, and `annotated-types` 0.8 or later at run time.
+  valgebra reads a constraint off the `annotated_types` vocabulary alone and
+  ignores a marker of any other class, so every bound the layer wrote as an
+  object carrying `ge`, `lt` or `min_length` constrained nothing on 0.0.17:
+  `gt`, `ge`, `lt`, `le`, `interval`, `size` and a one-element fixed sequence
+  each admitted every value. Each bound is written as that vocabulary's marker.
+  valgebra reads a typing form in metadata as metadata it ignores rather than
+  calling it, and vtjson calls every callable schema, so `Iterable[int]` and a
+  generic alias reach valgebra through a function that makes the call. With
+  both, every verdict is the one the layer reached on 0.0.16: the suite passes
+  1,325 tests on 3.14 and on the free-threaded 3.14t, 1,324 on 3.13, 1,310 on
+  3.12, 1,257 on 3.11 and 1,252 on the 3.10 floor, against the pinned oracle.
+
+    `docs/06-performance.md` is measured on it: every family reads at or
+    above its 0.0.16 ratio, the bounded refinement 15.8 times vtjson's speed
+    where it read 14.0 and the heterogeneous mapping 69.9 where it read 64.9.
+
 - valgebra 0.0.16 or later. No membership the layer asks about changes, so
   every verdict is the one it already reached: 632 rows pass on 3.11 through
   the newest interpreter and on the free-threaded build, 630 on the floor,

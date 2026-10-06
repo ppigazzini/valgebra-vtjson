@@ -44,8 +44,8 @@ interpreter — `--python cpython-3.14.7` — if the default resolves to the wro
 one.
 
 ```bash
-VIRTUAL_ENV=/tmp/bench uv pip install "valgebra==0.0.16" "vtjson==2.3.0" \
-  pytest pytest-benchmark
+VIRTUAL_ENV=/tmp/bench uv pip install "valgebra==0.0.17" "vtjson==2.3.0" \
+  "annotated-types>=0.8" pytest pytest-benchmark
 VIRTUAL_ENV=/tmp/bench uv pip install -e . --no-deps
 /tmp/bench/bin/python -m pytest benches/bench_vtjson_compare.py \
   -o python_files="bench_*.py" --benchmark-min-rounds=200 \
@@ -55,23 +55,23 @@ VIRTUAL_ENV=/tmp/bench uv pip install -e . --no-deps
 ## Baseline
 
 AMD Ryzen 7 PRO 7840U (Zen 4 "Phoenix", a 2023-era mobile part) under WSL2 on
-Linux 6.18, CPython 3.14.7 standard build, valgebra 0.0.16 from PyPI, vtjson
+Linux 6.18, CPython 3.14.7 standard build, valgebra 0.0.17 from PyPI, vtjson
 2.3.0. Mean and standard deviation over at least two hundred rounds of a single
 membership check on a passing value, median of three runs, lower is better:
 
 | Family | valgebra | vtjson | valgebra faster by |
 | --- | --- | --- | --- |
-| Scalar (`int`) | 44 ns ± 21 ns | 930 ns ± 662 ns | 22.1x |
-| Union (4 arms) | 46 ns ± 22 ns | 2.16 us ± 1.47 us | 46.4x |
-| Refinement (bounded int) | 90 ns ± 38 ns | 1.19 us ± 584 ns | 14.0x |
-| Nested record + `[str, ...]` | 104 ns ± 37 ns | 3.43 us ± 2.89 us | 33.3x |
-| Format (regex) | 213 ns ± 107 ns | 1.13 us ± 626 ns | 5.2x |
-| Deep nesting (12 levels) | 296 ns ± 139 ns | 7.58 us ± 3.73 us | 25.0x |
-| Mapping `{str: int}`, 50 entries | 383 ns ± 162 ns | 15.84 us ± 6.41 us | 41.5x |
-| Record, 50 fields | 511 ns ± 221 ns | 12.26 us ± 4.64 us | 24.0x |
-| Heterogeneous `{str: int, int: bool}` | 727 ns ± 324 ns | 47.11 us ± 14.96 us | 64.9x |
-| `[int, ...]`, 10,000 elements | 11.21 us ± 3.66 us | 1366 us ± 151.83 us | 122.2x |
-| Prefix+tail `[str, int, ...]` | 54.68 us ± 17.82 us | 1367 us ± 173.93 us | 24.5x |
+| Scalar (`int`) | 40 ns ± 74 ns | 937 ns ± 643 ns | 23.5x |
+| Union (4 arms) | 43 ns ± 32 ns | 2.17 us ± 1.22 us | 51.0x |
+| Refinement (bounded int) | 75 ns ± 28 ns | 1.18 us ± 536 ns | 15.8x |
+| Nested record + `[str, ...]` | 97 ns ± 32 ns | 3.41 us ± 1.77 us | 35.1x |
+| Format (regex) | 222 ns ± 85 ns | 1.16 us ± 499 ns | 5.2x |
+| Deep nesting (12 levels) | 271 ns ± 117 ns | 7.64 us ± 2.76 us | 28.2x |
+| Mapping `{str: int}`, 50 entries | 356 ns ± 173 ns | 14.90 us ± 6.28 us | 41.9x |
+| Record, 50 fields | 482 ns ± 201 ns | 11.36 us ± 4.35 us | 23.6x |
+| Heterogeneous `{str: int, int: bool}` | 649 ns ± 210 ns | 45.32 us ± 14.38 us | 69.9x |
+| `[int, ...]`, 10,000 elements | 10.27 us ± 3.70 us | 1329 us ± 152.87 us | 129.5x |
+| Prefix+tail `[str, int, ...]` | 50.71 us ± 13.90 us | 1341 us ± 149.22 us | 26.4x |
 
 valgebra is faster on every family. The spread is wide in relative terms — a
 per-round standard deviation of a third is ordinary on a laptop under load — and

@@ -6,10 +6,15 @@ is an implementation detail, while ``valgebra.__all__`` is the surface valgebra
 supports. The aliases exist so the translator and the constructs read in vtjson's
 vocabulary — ``intersect`` rather than ``intersection``, a ``validator`` builder
 rather than a class — and nothing else in the package imports valgebra directly.
+
+A bound reaches valgebra as an ``annotated_types`` marker, the one constraint
+vocabulary valgebra reads: a marker of any other class is metadata it ignores,
+whatever attributes it carries, so ``refined`` is where every bound is built.
 """
 
-from typing import Annotated
+from typing import Annotated, Any
 
+import annotated_types as at
 from valgebra import (
     ValidationError,
     anything,
@@ -36,6 +41,7 @@ __all__ = [
     "intersect",
     "nothing",
     "recursive",
+    "refined",
     "union",
     "validator",
 ]
@@ -46,12 +52,30 @@ def validator(spec: object) -> CompiledValidator:
     return CompiledValidator(spec)
 
 
-class _ExactLen:
-    """A length-bound marker valgebra reads by attribute (annotated-types style)."""
+# The marker each bound is written as, by the name vtjson's constructs give it.
+_BOUNDS = {
+    "ge": at.Ge,
+    "gt": at.Gt,
+    "le": at.Le,
+    "lt": at.Lt,
+    "min_length": at.MinLen,
+    "max_length": at.MaxLen,
+}
 
-    def __init__(self, length: int) -> None:
-        self.min_length = length
-        self.max_length = length
+
+def refined(**bounds: Any) -> CompiledValidator:
+    """Build a validator for ``object`` narrowed by each of ``bounds``.
+
+    Each bound is written as its ``annotated_types`` marker -- ``ge=0`` as
+    ``Ge(0)`` -- since valgebra reads constraints off that vocabulary alone. No
+    bound at all is ``object`` itself, which `Annotated` cannot spell. A bound
+    arrives already checked by the construct that names it, which is why it is
+    typed loosely here and strictly nowhere else.
+    """
+    markers = tuple(_BOUNDS[name](value) for name, value in bounds.items())
+    if not markers:
+        return CompiledValidator(object)
+    return CompiledValidator(Annotated[(object, *markers)])
 
 
 def fixed_sequence(*elements: object) -> CompiledValidator:
@@ -62,7 +86,8 @@ def fixed_sequence(*elements: object) -> CompiledValidator:
     sequence is expressed as a homogeneous list pinned to length one.
     """
     if len(elements) == 1:
-        return CompiledValidator(Annotated[list[elements[0]], _ExactLen(1)])  # ty: ignore[invalid-type-form]
+        one = Annotated[list[elements[0]], at.MinLen(1), at.MaxLen(1)]  # ty: ignore[invalid-type-form]
+        return CompiledValidator(one)
     return CompiledValidator(list(elements))
 
 
