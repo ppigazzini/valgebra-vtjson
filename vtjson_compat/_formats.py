@@ -8,7 +8,7 @@ reuse the same third-party packages vtjson does and are imported lazily as
 optional extras.
 """
 
-import datetime
+import datetime as dt
 import ipaddress
 import pathlib
 import re
@@ -129,9 +129,9 @@ def date_time(format: str | None = None) -> CompiledValidator:  # noqa: A002
             return False
         try:
             if format is not None:
-                datetime.datetime.strptime(obj, format)  # noqa: DTZ007
+                dt.datetime.strptime(obj, format)  # noqa: DTZ007
             else:
-                datetime.datetime.fromisoformat(obj)
+                dt.datetime.fromisoformat(obj)
         except (ValueError, TypeError):
             return False
         return True
@@ -147,7 +147,7 @@ def date() -> CompiledValidator:
         if not isinstance(obj, str):
             return False
         try:
-            datetime.date.fromisoformat(obj)
+            dt.date.fromisoformat(obj)
         except (ValueError, TypeError):
             return False
         return True
@@ -163,7 +163,7 @@ def time() -> CompiledValidator:
         if not isinstance(obj, str):
             return False
         try:
-            datetime.time.fromisoformat(obj)
+            dt.time.fromisoformat(obj)
         except (ValueError, TypeError):
             return False
         return True
