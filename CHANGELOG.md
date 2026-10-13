@@ -8,6 +8,24 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- valgebra 0.0.18 or later. valgebra reads a subscripted type alias as the
+  alias's body with the arguments in place, `Pair[int]` from `type Pair[T] =
+  list[T]` as `list[int]`, for `typing`'s alias class and `typing_extensions`'
+  alike. vtjson has no rule for one, so it calls the alias, and the call raises
+  on every value. On 0.0.18 the layer admitted what vtjson refuses wherever
+  such an alias was written; it sends a subscripted alias to the fallback
+  vtjson takes without asking valgebra. valgebra refuses a callable where a
+  schema goes, and every predicate the layer builds reaches it as `Annotated`
+  metadata, which it calls, so every other verdict is the one the layer
+  reached on 0.0.17: the suite passes 1,393 tests on 3.14 and on the
+  free-threaded 3.14t, 1,392 on 3.13, 1,370 on 3.12, 1,279 on 3.11 and 1,274
+  on the 3.10 floor, against the pinned oracle.
+
+    `docs/06-performance.md` is measured on it, with 0.0.17 interleaved in the
+    same session: the union, the bounded refinement and the nested record read
+    6 to 7% faster, runs that do not overlap, and every other family within the
+    spread of its own runs or below it.
+
 - A dataclass is valgebra's `instance_of`, the class's instances whatever their
   fields hold, where it was a predicate asking `isinstance`. It is the set
   vtjson reads and the layer already decided, so no verdict moves, and valgebra

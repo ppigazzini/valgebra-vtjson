@@ -121,9 +121,17 @@ gets the same treatment as a container literal written in a foreign class: the
 shape is decided by the equivalent builtin over a converted value, and the origin
 by an atom beside it. A value that will not convert is not one the origin admits.
 
-An origin naming neither kind keeps vtjson's fallback — an instance check if the
-form answers to `type`, a call otherwise. That is one question, not an
+An origin naming neither kind is handed to valgebra whole, and where valgebra
+builds nothing for it the layer keeps vtjson's fallback — an instance check if
+the form answers to `type`, a call otherwise. That is one question, not an
 interpreter branch; the interpreter supplies the difference.
+
+A subscripted type alias goes to that fallback without valgebra being asked.
+vtjson has no rule for one, so it calls `Pair[int]` from `type Pair[T] =
+list[T]`, and the call raises on every value: the schema admits nothing.
+valgebra reads the same form as the alias's body with the argument in place,
+`list[int]`, for `typing`'s alias class and `typing_extensions`' alike, so
+`_is_alias` asks about both.
 
 ## Strictness travels with the translation
 
@@ -211,10 +219,13 @@ A bound that cannot be compared against, a pattern that will not compile, a
 generic carrying the wrong number of arguments: each denotes no set of values and
 raises `SchemaError`, as it does in vtjson.
 
-The check is not cosmetic. A bound valgebra cannot read contributes no
-constraint, so the refinement would widen to **every** value rather than
-narrowing — a schema that silently stops enforcing is worse than one that
-refuses to build. The same holds of how a bound is written: valgebra reads a
-constraint off the `annotated_types` vocabulary alone and ignores a marker of
-any other class, whatever attributes it carries, so `refined` in
-`_valgebra_api.py` writes every bound as that vocabulary's marker.
+The check is not cosmetic. A bound nothing orders against, handed to valgebra,
+is decided by valgebra's rules rather than vtjson's: `Ge(object())` builds a
+refinement that admits no value, and `Ge(None)` is refused with
+`NotImplementedError` — a constant verdict with no explanation, or a refusal
+that is not the `SchemaError` vtjson raises. How a bound is written matters as
+much: valgebra reads a constraint off the `annotated_types` vocabulary alone and
+ignores a marker of any other class, whatever attributes it carries, so a bound
+written that way constrains nothing and the refinement widens to **every**
+value. `refined` in `_valgebra_api.py` writes every bound as that vocabulary's
+marker.

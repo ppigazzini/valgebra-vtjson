@@ -11,13 +11,28 @@ positions a schema can sit in. A `typing_extensions.TypeAliasType` is a class
 of its own on every supported interpreter, which vtjson does not recognise as
 an alias; it is a callable vtjson refuses, and `test_callable_forms.py` holds
 it.
+
+A subscripted alias is neither kind of name. `Pair[int]` reports the alias as
+its origin, which vtjson has no rule for, so vtjson calls it, and the call
+raises on every value: the schema admits nothing. valgebra reads the same form
+as the alias's body with the argument in place, `list[int]`. The axis there is
+the kind of alias -- `typing`'s or `typing_extensions`', with one parameter or
+two, defaulted, recursive -- crossed with the same positions.
 """
 
 from __future__ import annotations
 
 import sys
 import typing
-from typing import TYPE_CHECKING, Annotated, Any, NamedTuple, NewType, TypedDict
+from typing import (
+    TYPE_CHECKING,
+    Annotated,
+    Any,
+    NamedTuple,
+    NewType,
+    TypedDict,
+    TypeVar,
+)
 
 import pytest
 import typing_extensions
@@ -87,6 +102,7 @@ POSITIONS = [
     _Position("Annotated metadata", lambda _m, c: Annotated[object, c], lambda v: v),
     _Position("a union's arm", lambda m, c: m.union(c, bytes), lambda v: v),
     _Position("a dict key", lambda _m, c: {c: int}, lambda v: {v: 1}),
+    _Position("a generic's argument", lambda _m, c: list[c], lambda v: [v]),  # ty: ignore[invalid-type-form]
 ]
 
 
@@ -123,15 +139,13 @@ def test_a_name_decides_as_the_schema_it_names_does_in_vtjson(
 
 
 def _aliases() -> list[Any]:
-    """Return the aliases only a `type` statement spells: a recursive one."""
+    """Return the alias only a `type` statement spells: a recursive one."""
     if sys.version_info < (3, 12):
         return []
     namespace: dict[str, Any] = {}
     exec("type Tree = list[Tree] | int", namespace)  # noqa: S102
-    exec("type Pair[T] = list[T]", namespace)  # noqa: S102
     return [
         pytest.param(namespace["Tree"], [1, [1, [2]], ["x"], [[["x"]]]], id="Tree"),
-        pytest.param(namespace["Pair"][int], [[1], ["x"], 1], id="Pair[int]"),
     ]
 
 
@@ -141,7 +155,7 @@ def test_an_alias_a_type_statement_spells_decides_as_vtjson_does(
     alias: object,
     values: list[object],
 ) -> None:
-    """A recursive alias is a recursive schema; a subscripted one is a call."""
+    """A recursive alias is a recursive schema."""
     divergences = [
         (value, a, b)
         for value in values
@@ -149,4 +163,69 @@ def test_an_alias_a_type_statement_spells_decides_as_vtjson_does(
     ]
     assert not divergences, ", ".join(
         f"{value!r} vtjson={a} layer={b}" for value, a, b in divergences
+    )
+
+
+_T = TypeVar("_T")
+_Listed = typing_extensions.TypeAliasType("_Listed", list[_T], type_params=(_T,))
+
+
+def _subscripted() -> list[Any]:
+    """Return each kind of subscripted alias this interpreter can spell."""
+    rows = [pytest.param(_Listed[int], id="typing_extensions alias[int]")]
+    namespace: dict[str, Any] = {}
+    if sys.version_info >= (3, 12):
+        exec("type Pair[T] = list[T]", namespace)  # noqa: S102
+        exec("type Two[K, V] = dict[K, V]", namespace)  # noqa: S102
+        exec("type Nest[T] = T | list[Nest[T]]", namespace)  # noqa: S102
+        rows += [
+            pytest.param(namespace["Pair"][int], id="Pair[int]"),
+            pytest.param(namespace["Pair"][float], id="Pair[float]"),
+            pytest.param(namespace["Two"][str, int], id="Two[str, int]"),
+            pytest.param(namespace["Nest"][int], id="Nest[int]"),
+        ]
+    if sys.version_info >= (3, 13):
+        exec("type Defaulted[T = int] = list[T]", namespace)  # noqa: S102
+        rows.append(pytest.param(namespace["Defaulted"][str], id="Defaulted[str]"))
+    return rows
+
+
+# What each alias's body admits, and values it does not, so a layer reading the
+# body diverges on the first kind and a layer making vtjson's call on neither.
+_BODIES: list[object] = [[], [1], [1.5], ["x"], 1, "x", {}, {"a": 1}]
+
+
+def _outcome(module: Any, schema: object, obj: object) -> str:
+    """Return ``module``'s verdict on ``obj``, or the class of what it raised.
+
+    Before 3.11 `inspect.signature` cannot read a subscripted
+    `typing_extensions` alias and raises `ValueError`, and vtjson asks it when
+    the schema is compiled. The layer asks the same question, so agreeing is
+    raising the same class there.
+    """
+    try:
+        module.validate(schema, obj)
+    except module.ValidationError:
+        return "reject"
+    except Exception as exc:  # noqa: BLE001  (the refusal is the answer being compared)
+        return type(exc).__name__
+    return "accept"
+
+
+@pytest.mark.parametrize("position", POSITIONS, ids=[p.name for p in POSITIONS])
+@pytest.mark.parametrize("alias", _subscripted())
+def test_a_subscripted_alias_is_the_call_vtjson_makes(
+    alias: object,
+    position: _Position,
+) -> None:
+    """Every value reaches the same verdict under both libraries."""
+    values = [v for v in _BODIES if _hashable(v) or position.name != "a dict key"]
+    divergences = [
+        (probe, a, b)
+        for value in values
+        if (a := _outcome(vt, position.wrap(vt, alias), probe := position.lift(value)))
+        != (b := _outcome(vg, position.wrap(vg, alias), probe))
+    ]
+    assert not divergences, f"{alias!r} as {position.name}: " + (
+        ", ".join(f"{probe!r} vtjson={a} layer={b}" for probe, a, b in divergences)
     )

@@ -44,7 +44,7 @@ interpreter — `--python cpython-3.14.7` — if the default resolves to the wro
 one.
 
 ```bash
-VIRTUAL_ENV=/tmp/bench uv pip install "valgebra==0.0.17" "vtjson==2.3.0" \
+VIRTUAL_ENV=/tmp/bench uv pip install "valgebra==0.0.18" "vtjson==2.3.0" \
   "annotated-types>=0.8" pytest pytest-benchmark
 VIRTUAL_ENV=/tmp/bench uv pip install -e . --no-deps
 /tmp/bench/bin/python -m pytest benches/bench_vtjson_compare.py \
@@ -55,23 +55,23 @@ VIRTUAL_ENV=/tmp/bench uv pip install -e . --no-deps
 ## Baseline
 
 AMD Ryzen 7 PRO 7840U (Zen 4 "Phoenix", a 2023-era mobile part) under WSL2 on
-Linux 6.18, CPython 3.14.7 standard build, valgebra 0.0.17 from PyPI, vtjson
+Linux 6.18, CPython 3.14.7 standard build, valgebra 0.0.18 from PyPI, vtjson
 2.3.0. Mean and standard deviation over at least two hundred rounds of a single
 membership check on a passing value, median of three runs, lower is better:
 
 | Family | valgebra | vtjson | valgebra faster by |
 | --- | --- | --- | --- |
-| Scalar (`int`) | 40 ns ± 74 ns | 937 ns ± 643 ns | 23.5x |
-| Union (4 arms) | 43 ns ± 32 ns | 2.17 us ± 1.22 us | 51.0x |
-| Refinement (bounded int) | 75 ns ± 28 ns | 1.18 us ± 536 ns | 15.8x |
-| Nested record + `[str, ...]` | 97 ns ± 32 ns | 3.41 us ± 1.77 us | 35.1x |
-| Format (regex) | 222 ns ± 85 ns | 1.16 us ± 499 ns | 5.2x |
-| Deep nesting (12 levels) | 271 ns ± 117 ns | 7.64 us ± 2.76 us | 28.2x |
-| Mapping `{str: int}`, 50 entries | 356 ns ± 173 ns | 14.90 us ± 6.28 us | 41.9x |
-| Record, 50 fields | 482 ns ± 201 ns | 11.36 us ± 4.35 us | 23.6x |
-| Heterogeneous `{str: int, int: bool}` | 649 ns ± 210 ns | 45.32 us ± 14.38 us | 69.9x |
-| `[int, ...]`, 10,000 elements | 10.27 us ± 3.70 us | 1329 us ± 152.87 us | 129.5x |
-| Prefix+tail `[str, int, ...]` | 50.71 us ± 13.90 us | 1341 us ± 149.22 us | 26.4x |
+| Scalar (`int`) | 38 ns ± 14 ns | 826 ns ± 2.07 us | 21.9x |
+| Union (4 arms) | 40 ns ± 16 ns | 1.84 us ± 647 ns | 46.3x |
+| Refinement (bounded int) | 70 ns ± 19 ns | 1.07 us ± 455 ns | 15.2x |
+| Nested record + `[str, ...]` | 88 ns ± 126 ns | 3.00 us ± 1.61 us | 34.1x |
+| Format (regex) | 207 ns ± 63 ns | 996 ns ± 463 ns | 4.8x |
+| Deep nesting (12 levels) | 267 ns ± 97 ns | 6.53 us ± 2.56 us | 24.5x |
+| Mapping `{str: int}`, 50 entries | 355 ns ± 117 ns | 14.14 us ± 3.75 us | 39.8x |
+| Record, 50 fields | 452 ns ± 707 ns | 10.76 us ± 3.24 us | 23.8x |
+| Heterogeneous `{str: int, int: bool}` | 654 ns ± 238 ns | 42.14 us ± 15.35 us | 64.4x |
+| `[int, ...]`, 10,000 elements | 9.80 us ± 3.07 us | 1246 us ± 172.89 us | 127.2x |
+| Prefix+tail `[str, int, ...]` | 47.67 us ± 14.62 us | 1234 us ± 168.70 us | 25.9x |
 
 valgebra is faster on every family. The spread is wide in relative terms — a
 per-round standard deviation of a third is ordinary on a laptop under load — and
@@ -85,7 +85,7 @@ at every position — a homogeneous `[int, ...]` is one loop over one element
 schema, where a prefix and a tail is a machine that reads a different schema at
 the front.
 
-The **format** family is the narrowest at 5.2x, and it is the one place the two
+The **format** family is the narrowest at 4.8x, and it is the one place the two
 libraries run the same engine. A pattern is matched by Python's `re` on both
 sides, because the compatibility layer holds itself to `re`'s decisions:
 valgebra's native `Regex` is a Rust engine whose dialect differs on patterns
@@ -97,8 +97,8 @@ narrow margin is that choice, not a limit of the walk.
 - These are a single machine class; re-run on your own hardware for absolute
   numbers. The ratios are what travel.
 - vtjson's default `validate(schema, obj)` recompiles the schema on every call,
-  which is slower still (for the 50-field record, ~230 us per call versus the
-  ~12 us compile-once path measured above). The table uses vtjson's compile-once
+  which is slower still (for the 50-field record, ~210 us per call versus the
+  ~11 us compile-once path measured above). The table uses vtjson's compile-once
   path, its best case, to keep the comparison fair.
 - valgebra and vtjson reach the same decision here only for the constructs the
   compatibility layer supports; the differences ledger

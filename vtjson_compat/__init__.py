@@ -24,8 +24,9 @@ list written here would.
 
 A construct checks its own arguments when the schema is built and raises
 ``SchemaError`` when they cannot express a set of values, as vtjson does. The
-check is not cosmetic: a bound valgebra cannot read contributes no constraint,
-so the refinement would widen to every value rather than narrowing.
+check is not cosmetic: a bound nothing orders against would reach valgebra,
+which decides it by its own rules -- a refinement admitting no value, or a
+refusal that is not a ``SchemaError``.
 
 ``compile`` builds a schema once into a reusable validator (vtjson's
 compile-once path); ``validate`` recompiles per call, like vtjson's ``validate``.

@@ -9,6 +9,7 @@ meaning is expressed with the algebra so the accept/reject decision matches.
 import importlib
 import inspect
 import math
+import sys
 import threading
 import typing
 from collections import UserString
@@ -69,9 +70,10 @@ class SchemaError(Exception):
 def _bound(value: object, role: str) -> object:
     """Return a comparison bound, refusing one nothing can be ordered against.
 
-    A bound valgebra cannot read contributes no constraint, so the refinement
-    widens to every value rather than narrowing. Self-comparison is the probe:
-    it needs no second operand and no assumption about what will be validated.
+    vtjson refuses such a bound when the schema is built. Handed to valgebra, it
+    is decided by valgebra's rules instead: a refinement admitting no value, or
+    a `NotImplementedError` for `None`. Self-comparison is the probe: it needs
+    no second operand and no assumption about what will be validated.
     """
     try:
         # Whether the operator exists at all is the question being asked, so
@@ -718,18 +720,38 @@ def _translated_generic(
             return _foreign_generic(schema, origin, dict, open_records=open_records)
         if issubclass(origin, Container):
             return _foreign_generic(schema, origin, list, open_records=open_records)
+    if _is_alias(origin):
+        # vtjson has no rule for a subscripted alias, so it calls `Pair[int]`,
+        # and the call raises on every value. valgebra reads the same form as
+        # the alias's body with the argument in place, `list[int]`, which
+        # admits what vtjson refuses.
+        return _unplaced(schema)
     try:
         return _validator(schema)
     except NotImplementedError:
         return _unplaced(schema)
 
 
-def _unplaced(schema: object) -> CompiledValidator:
-    """Translate a subscripted generic whose origin has no node to become.
+def _is_alias(origin: object) -> bool:
+    """Whether ``origin`` is a type alias, `typing`'s or `typing_extensions`'.
 
-    vtjson has none either: it falls through to the rule for any other schema,
-    which is an instance check for a class, a call for anything callable, and
-    equality for the rest.
+    `typing_extensions` defines a class of its own on every supported release,
+    and valgebra reads an alias of either class. An alias of that class exists
+    only once the module is loaded, so the class is asked for there rather than
+    imported, which keeps the module off the layer's dependencies.
+    """
+    extensions = sys.modules.get("typing_extensions")
+    classes = (_TYPE_ALIAS, getattr(extensions, "TypeAliasType", None))
+    return any(kind is not None and isinstance(origin, kind) for kind in classes)
+
+
+def _unplaced(schema: object) -> CompiledValidator:
+    """Translate a subscripted generic by the rule vtjson gives any other schema.
+
+    vtjson has no rule for its origin, so it falls through to the rule for any
+    other schema: an instance check for a class, a call for anything callable,
+    and equality for the rest. A form reaches here where valgebra builds no node
+    for it, or reads it apart from vtjson.
     """
     if isinstance(schema, type):
         # A subscripted generic answers `isinstance(..., type)` before 3.11, and
