@@ -76,6 +76,7 @@ valgebra follows the typing spec's model of literals and so decides differently.
 | `magic` | always available (libmagic installed) | needs the `valgebra-vtjson[magic]` extra | Install the extra, or replace with a predicate. |
 | `email`, `domain_name` | always available | need the `valgebra-vtjson[formats]` extra | Install the extra. |
 | A value that raises under inspection | most constructs let the exception out of `validate`, so a value with a raising `__len__`, `__contains__`, `__eq__` or property crashes the call | the value is rejected, and the violation names the value rather than the predicate that inspected it | Catch `ValidationError`, not the value's own exception. A rejection where vtjson crashes is the one direction this layer does not follow it. |
+| An optional attribute the value lacks | `fields` reads it anyway, and `validate` raises `AttributeError` | the value is rejected, so an optional attribute decides as a required one does | Supply the attribute, or catch `ValidationError`. vtjson admits no value lacking it, and neither does the layer. |
 | Your own raising `__validate__` hook | the exception leaves `validate` | the value is rejected, with `predicate_error` | Catch `ValidationError`, and read `err.code`: `predicate_error` means the hook you supplied raised, which is a bug in the hook rather than a property of the value. A callable schema that raises is a failure in both, as vtjson reads it, so its `complement` admits the value. |
 | Fixed-length sequences | `len(obj)` is called, so a `list` subclass with a raising `__len__` crashes the call | the real sequence is read without invoking a Python-level `__len__` override, so such a value is judged on its actual contents | None for ordinary values. A `list` subclass that lies about its length is validated on what it holds. |
 | `make_type`'s `subs` | performs the substitution | accepts the argument and raises `NotImplementedError` when it is non-empty | Express recursion with valgebra's `recursive` fixpoint. Ignoring the argument would build a type over a schema the caller did not ask for. |
@@ -146,6 +147,13 @@ carrying no annotations at all is refused, with a `SchemaError`.
 A dict key that is not a string is a **clause** when it is a schema and a
 **declared key** when it is a constant: `{int: str}` says nothing about a
 mapping with no int key, and `{1: str}` says the mapping carries a `1`.
+
+A key says it is optional as it does in vtjson, in a dict schema and in the
+names `fields` takes: a trailing `?`, or `optional_key(key)` for a key of any
+type. `"a\?"` is the required key `a?`, and so is `optional_key("a?",
+_optional=False)`. `optional_key` is vtjson's class rather than a string
+spelling, so it marks a constant of any type: `{optional_key(1): str}` admits a
+mapping with no `1`.
 
 A dict key that more than one clause claims — a named field whose own
 catch-all also matches its name — belongs when **any** of those clauses admits

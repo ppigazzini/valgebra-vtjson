@@ -279,6 +279,13 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `cond` admit the value, wherever the callable is written and a generic alias
   vtjson calls, `Iterable[int]`, among them. The raise stopped valgebra's walk,
   and a stop is refused by a schema and by its negation alike.
+- A key says it is optional as vtjson reads it, in a dict schema and in
+  `fields`: `"a\?"` is the required key `a?`, `fields({"a?": int})` names the
+  attribute `a`, and `optional_key` is vtjson's class, marking a key of any
+  type, `optional_key(1)` among them. A constant spelled twice is one key,
+  required if either spelling is. The layer read `\?` as a field named `a\`,
+  read `fields` names as written, and spelled `optional_key` as a string, so a
+  key of another type, or a required one ending in `?`, could not be written.
 
 ## [0.0.1] - 2026-08-25
 

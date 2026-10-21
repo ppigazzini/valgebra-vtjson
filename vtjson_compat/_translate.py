@@ -19,6 +19,9 @@ from types import UnionType
 from typing import (
     Annotated,
     Any,
+    Generic,
+    NamedTuple,
+    TypeVar,
     Union,
     get_args,
     get_origin,
@@ -171,7 +174,7 @@ def _items_match(
     )
 
 
-def _attributes_match(inner: Mapping[str, CompiledValidator], obj: object) -> bool:
+def _attributes_match(inner: Mapping[Any, CompiledValidator], obj: object) -> bool:
     """Whether ``obj`` carries every attribute in ``inner``, each satisfying it."""
     for name, validator in inner.items():
         try:
@@ -1027,37 +1030,43 @@ def _translate_dict(
         # laxly, every key is unclaimed and so every dict belongs.
         empty = {_complement(_union()): _validator(_anything)} if open_records else {}
         return _of_own_class(schema, _validator(empty))
-    # A string key is a record field (a trailing "?" marks it optional); any
-    # other key is a schema constraining the rest. valgebra's native dict form
-    # combines both — named fields plus one or more key-pattern catch-all clauses
-    # — so records, single mappings, multi-clause maps, and a record mixed with a
-    # catch-all all translate uniformly.
+    # A key valgebra's dict literal can spell is a record field; every other
+    # key is a clause keyed by its own schema -- a key schema constraining the
+    # keys it matches, or a constant matching itself, which the mapping must
+    # also carry. valgebra's native dict form combines both -- named fields
+    # plus one or more key-pattern catch-all clauses -- so records, single
+    # mappings, multi-clause maps, and a record mixed with a catch-all all
+    # translate uniformly.
+    entries = _entries(schema)
     catch_alls = {
-        key: (
-            _translate(key, exact=True),
-            _translate(value, open_records=open_records),
+        index: (
+            _translate(entry.key, exact=True),
+            _translate(entry.value, open_records=open_records),
         )
-        for key, value in schema.items()
-        if not isinstance(key, str)
+        for index, entry in enumerate(entries)
+        if not entry.is_field
     }
     translated: dict[object, CompiledValidator] = {}
-    for key, value in schema.items():
-        if not isinstance(key, str):
-            pattern, clause = catch_alls[key]
+    fields: list[tuple[str, bool, CompiledValidator]] = []
+    for index, entry in enumerate(entries):
+        if not entry.is_field:
+            pattern, clause = catch_alls[index]
             translated[pattern] = clause
             continue
         # vtjson admits a key when *any* clause claiming it admits the value, so
         # a field its own catch-alls also claim has more than one way to pass.
         # Which catch-alls claim a literal key is settled here, not per value.
-        field = _translate(value, open_records=open_records)
+        name = str(entry.key)
+        field = _translate(entry.value, open_records=open_records)
         alternatives = [
-            clause
-            for pattern, clause in catch_alls.values()
-            if pattern.is_valid(_field_name(key))
+            clause for pattern, clause in catch_alls.values() if pattern.is_valid(name)
         ]
-        translated[key] = _union(field, *alternatives) if alternatives else field
+        joined = _union(field, *alternatives) if alternatives else field
+        # valgebra strips one trailing `?` as the optional mark.
+        translated[name if entry.required else f"{name}?"] = joined
+        fields.append((name, entry.required, joined))
     if open_records:
-        translated[_unclaimed_key(schema, catch_alls)] = _validator(_anything)
+        translated[_unclaimed_key(fields, catch_alls)] = _validator(_anything)
     try:
         structure = _validator(translated)
     except NotImplementedError:
@@ -1075,37 +1084,133 @@ def _translate_dict(
         # what this layer is one-to-one about. Every other dict keeps the native
         # form.
         structure = _clauses_beside_the_mapping(
-            schema, translated, catch_alls, open_records=open_records
+            fields, catch_alls, open_records=open_records
         )
     built = _of_own_class(schema, structure)
-    declared = tuple(
-        key for key in schema if not isinstance(key, str) and not _is_key_schema(key)
+    carried = tuple(
+        entry.key
+        for entry in entries
+        if entry.required and not entry.is_field and not entry.is_schema
     )
-    return _intersect(built, _carries(declared)) if declared else built
+    return _intersect(built, _carries(carried)) if carried else built
+
+
+class _Entry(NamedTuple):
+    """One key of a dict schema, as vtjson reads it."""
+
+    key: object
+    required: bool
+    value: object
+    is_schema: bool
+
+    @property
+    def is_field(self) -> bool:
+        """Whether valgebra's dict literal can name this key as a field.
+
+        Every trailing `?` is the literal's optional mark, so a string is a
+        field unless it is required and ends in one: that key has no spelling,
+        and is a clause keyed by its own text instead.
+        """
+        return (
+            not self.is_schema
+            and isinstance(self.key, str)
+            and not (self.required and self.key.endswith("?"))
+        )
+
+
+def _entries(schema: dict[object, object]) -> list[_Entry]:
+    """Return ``schema``'s keys as vtjson's dict reads them, in their order.
+
+    vtjson reads each key for the key it spells and whether it is optional, and
+    then reads the key itself: a constant is a key the mapping carries, and
+    anything else a clause over the keys it matches, which no optional mark
+    reaches. A constant spelled twice -- `"a"` beside `"a?"` -- is one key,
+    required if either spelling says so, holding the schema written last, as
+    vtjson's dict holds it.
+    """
+    entries: list[_Entry] = []
+    constants: dict[object, int] = {}
+    for spelling, value in schema.items():
+        key, optional = _read_key(spelling)
+        if _is_key_schema(key):
+            entries.append(_Entry(key, required=False, value=value, is_schema=True))
+            continue
+        index = constants.get(key)
+        if index is None:
+            constants[key] = len(entries)
+            entries.append(
+                _Entry(key, required=not optional, value=value, is_schema=False)
+            )
+            continue
+        required = entries[index].required or not optional
+        entries[index] = _Entry(
+            entries[index].key, required=required, value=value, is_schema=False
+        )
+    return entries
+
+
+_K = TypeVar("_K")
+
+
+class optional_key(Generic[_K]):  # noqa: N801  (vtjson's name)
+    """Mark a key optional, in a dict schema or in `fields`, as vtjson's does.
+
+    A string key says the same with a trailing `?`. The key is taken as
+    written, so `optional_key("a?")` is the optional key `a?`, and a key of any
+    other type is a constant the mapping may lack. ``_optional=False`` declares
+    the key required, which is the spelling a required string ending in `?`
+    has. Two of them are equal when their keys are, whatever each says of
+    presence, as vtjson's compare.
+    """
+
+    __slots__ = ("key", "optional")
+
+    def __init__(self, key: _K, _optional: bool = True) -> None:  # noqa: FBT001, FBT002
+        self.key = key
+        self.optional = _optional
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, optional_key):
+            return False
+        return self.key == other.key
+
+    def __hash__(self) -> int:
+        return hash(self.key)
+
+
+def _read_key(key: object) -> tuple[object, bool]:
+    r"""Return the key ``key`` spells and whether it is optional, as vtjson reads it.
+
+    vtjson's `_canonize_key`: a trailing `?` marks a string optional and is
+    dropped, and a `\?` ending a string longer than two characters is a
+    literal `?` ending a required one, so `\?` alone is the optional key `\`.
+    `optional_key` says it for a key of any type.
+    """
+    if isinstance(key, optional_key):
+        return key.key, key.optional
+    if isinstance(key, str) and key.endswith("?"):
+        if len(key) > 2 and key[-2] == "\\":  # noqa: PLR2004  (vtjson's test)
+            return f"{key[:-2]}?", False
+        return key[:-1], True
+    return key, False
 
 
 def _clauses_beside_the_mapping(
-    schema: dict[object, object],
-    translated: dict[object, CompiledValidator],
-    catch_alls: dict[object, tuple[CompiledValidator, CompiledValidator]],
+    fields: list[tuple[str, bool, CompiledValidator]],
+    catch_alls: dict[int, tuple[CompiledValidator, CompiledValidator]],
     *,
     open_records: bool,
 ) -> CompiledValidator:
-    """Build ``schema``'s dict check with its key clauses run beside the mapping.
+    """Build a dict check with its key clauses run beside the mapping.
 
     The reading is the one the native form gives: a declared field decides its
     own value, a key some clause claims belongs when **any** claiming clause
     admits its value, and a key no clause claims belongs only under laxness.
+    The clause a declared field carries is the one the caller already built,
+    which is the field's own schema joined with every catch-all claiming its
+    name -- a named key under two catch-alls has three ways to pass, and
+    rebuilding the field's schema alone would take two of them away.
     """
-    # The clause a declared field carries is the one the caller already built,
-    # which is the field's own schema joined with every catch-all claiming its
-    # name -- a named key under two catch-alls has three ways to pass, and
-    # rebuilding the field's schema alone would take two of them away.
-    fields = [
-        (_field_name(key), not key.endswith("?"), translated[key])
-        for key in schema
-        if isinstance(key, str)
-    ]
     names = {name for name, _, _ in fields}
     clauses = list(catch_alls.values())
 
@@ -1147,19 +1252,19 @@ def _clauses_beside_the_mapping(
 
 
 def _unclaimed_key(
-    schema: dict[object, object],
-    catch_alls: dict[object, tuple[CompiledValidator, CompiledValidator]],
+    fields: list[tuple[str, bool, CompiledValidator]],
+    catch_alls: dict[int, tuple[CompiledValidator, CompiledValidator]],
 ) -> CompiledValidator:
-    """Build the key schema for the keys no clause of ``schema`` claims.
+    """Build the key schema for the keys no field or clause claims.
 
     Laxness excuses a key **no** clause matches, so the permissive clause is the
     complement of the ones that do. Giving it every key instead — which is what
     opening a compiled record does — would subsume the narrower clauses and free
     the keys the schema was written to constrain.
     """
-    claimed = [
-        _validator(_field_name(key)) for key in schema if isinstance(key, str)
-    ] + [pattern for pattern, _ in catch_alls.values()]
+    claimed = [_validator(name) for name, _, _ in fields] + [
+        pattern for pattern, _ in catch_alls.values()
+    ]
     return _complement(_union(*claimed))
 
 
@@ -1196,8 +1301,3 @@ def _carries(keys: tuple[object, ...]) -> CompiledValidator:
             return False
 
     return _predicate(check)
-
-
-def _field_name(key: str) -> str:
-    """Return the field a record key declares, without the optional mark."""
-    return key.removesuffix("?")

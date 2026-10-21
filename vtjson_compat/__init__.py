@@ -88,7 +88,7 @@ from ._formats import (
     time,
     url,
 )
-from ._translate import SchemaError, _translate
+from ._translate import SchemaError, _translate, optional_key
 from ._valgebra_api import CompiledValidator, ValidationError
 from ._valgebra_api import (
     anything as _anything,
@@ -151,15 +151,6 @@ __all__ = [
     "url",
     "validate",
 ]
-
-
-def optional_key(key: str, _optional: bool = True) -> str:  # noqa: FBT001, FBT002
-    """Mark a record key optional, using valgebra's ``"key?"`` convention.
-
-    Following vtjson, ``_optional=False`` declares the key required, so a
-    record's keys can be marked from a flag the caller computes.
-    """
-    return f"{key}?" if _optional else key
 
 
 def compile(schema: object) -> CompiledValidator:  # noqa: A001  (vtjson's name)

@@ -183,6 +183,26 @@ A `_Deferred` is also a schema when it appears as a *dict key*, where the
 question is whether a key constrains other keys or is one. It constrains, the
 same as any other construct written there.
 
+## A key is read for what it spells
+
+vtjson reads every key of a dict schema, and every name `fields` takes, through
+`_canonize_key` before anything else: a trailing `?` marks a string optional and
+is dropped, and a `\?` ending a string longer than two characters is a literal
+`?` ending a required one. `optional_key(key, _optional)` says the same for a
+key of any type, its text taken as written. `_read_key` is that reading.
+
+Then the key itself is read. A constant is a key the mapping carries unless it
+is optional, and anything else is a clause over the keys it matches, which no
+optional mark reaches. A constant spelled twice, `"a"` beside `"a?"`, is one
+key: required if either spelling says so, holding the schema written last, as
+vtjson's dict holds it. `_entries` reads a dict's keys this way.
+
+valgebra's dict literal spells a string field by its name and marks an optional
+one with a trailing `?`, stripped once, so an optional `a?` is `"a??"`. A
+required string ending in `?` has no spelling there. It is built the way a
+constant of any other type is: a clause keyed by its own value, and a presence
+check beside the mapping.
+
 ## Both spellings of a union
 
 `X | Y` and `Union[X, Y]` do not report the same origin on every supported

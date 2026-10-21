@@ -21,9 +21,11 @@ from ._translate import (
     _nullary,
     _number,
     _predicate,
+    _read_key,
     _structural,
     _text,
     _translate,
+    optional_key,
 )
 from ._valgebra_api import (
     CompiledValidator,
@@ -350,19 +352,32 @@ def filter(  # noqa: A001  (mirrors vtjson's public name)
     return _deferred(build)
 
 
-def fields(d: Mapping[str, object]) -> CompiledValidator:
-    """Require each attribute named in ``d`` to be present and match its schema."""
+def fields(d: Mapping[object, object]) -> CompiledValidator:
+    """Require each attribute named in ``d`` to be present and match its schema.
+
+    A name is read as vtjson reads a dict key, so a trailing `?` marks the
+    attribute optional and `optional_key` says the same. vtjson reads an
+    optional attribute the value lacks anyway, and the read raises out of
+    `validate`; here the value is rejected, so an optional attribute decides
+    like a required one.
+    """
     if not isinstance(d, Mapping):
         msg = f"the attributes {d!r} are not a Mapping"
         raise SchemaError(msg)
-    names = [_text(name, "attribute name") for name in d]
+    for name in d:
+        if not isinstance(name, str | optional_key):
+            msg = f"the attribute name {name!r} is not a string or an optional_key"
+            raise SchemaError(msg)
+    # Two spellings of one name are one attribute holding the schema written
+    # last, as vtjson's mapping of them holds it.
+    named = {_read_key(name)[0]: schema for name, schema in d.items()}
 
     def build(*, open_records: bool) -> CompiledValidator:
         # Translated once, when the mode is known, and never per value: a schema
         # vtjson refuses is refused here, rather than read as a rejection.
         inner = {
             name: _translate(schema, open_records=open_records)
-            for name, schema in zip(names, d.values(), strict=True)
+            for name, schema in named.items()
         }
         return _predicate(lambda obj: _attributes_match(inner, obj))
 

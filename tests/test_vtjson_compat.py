@@ -31,7 +31,9 @@ def test_record_optional_key_convention():
     vg.validate(schema, {"name": "Ada", "age": 36})
     with pytest.raises(vg.ValidationError):
         vg.validate(schema, {"name": "Ada", "extra": 1})  # strict-closed
-    assert vg.optional_key("age") == "age?"
+    keyed = {"name": str, vg.optional_key("age"): int}
+    vg.validate(keyed, {"name": "Ada"})
+    vg.validate(keyed, {"name": "Ada", "age": 36})
 
 
 def test_comparison_and_size_refinements():
