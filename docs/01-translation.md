@@ -258,6 +258,11 @@ This is not the labelled recursion the ledger records as unsupported. That is
 `set_label` plus validate-time `subs`, a different feature; a dict that simply
 holds itself uses none of it.
 
+The fixpoint is valgebra's, and so is how deep it reads a value: a value nested
+128 levels against a recursive schema stops the walk with `recursion_limit`,
+where vtjson reads on until Python's own recursion gives out. The ledger records
+that as a decision, and `tests/test_ledger_claims.py` measures it.
+
 ## Arguments are checked when the schema is built
 
 A bound that cannot be compared against, a pattern that will not compile, a
