@@ -274,6 +274,11 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   validated, as vtjson refuses it, rather than when the wrapper is called. A
   schema written at import and validated later fails at the same line under
   both. Each still settles its own mode, so the innermost wrapper decides.
+- A callable schema that raises is a failure, as vtjson reads it, and so is
+  one whose answer raises when its truth is read: `complement`, `ifthen` and
+  `cond` admit the value, wherever the callable is written and a generic alias
+  vtjson calls, `Iterable[int]`, among them. The raise stopped valgebra's walk,
+  and a stop is refused by a schema and by its negation alike.
 
 ## [0.0.1] - 2026-08-25
 

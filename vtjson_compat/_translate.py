@@ -261,6 +261,12 @@ def _called(schema: Callable[..., object]) -> CompiledValidator:
     schema, and refuses the schema where that fails: a callable needing two
     arguments, or none, or one only by keyword. The question is vtjson's own,
     so a signature `inspect` cannot read raises what it raises there.
+
+    vtjson reads a call that raises as a failure, the same answer as a falsy
+    one. Let out, the raise would stop valgebra's walk, and a stop is no
+    answer: `complement` would refuse the value its schema refuses, where
+    vtjson's admits it. The truth of the answer is read inside the same guard,
+    since vtjson reads it there.
     """
     try:
         inspect.signature(schema).bind("test_value")
@@ -272,8 +278,11 @@ def _called(schema: Callable[..., object]) -> CompiledValidator:
     # reads as metadata it does not recognise and ignores. vtjson calls every
     # callable schema, `Iterable[int]` and a generic alias included, so the
     # call is made through a function of this module, which valgebra calls.
-    def called(obj: object) -> object:
-        return schema(obj)
+    def called(obj: object) -> bool:
+        try:
+            return bool(schema(obj))
+        except Exception:  # noqa: BLE001  (vtjson reads a raise as a failure)
+            return False
 
     return _predicate(called)
 

@@ -55,6 +55,9 @@ the leaf and in the generic arm's fallback alike. vtjson calls every callable
 schema, and valgebra does not call a typing form: it reads `Iterable[int]` or a
 generic alias in metadata as metadata it ignores, which admits every value.
 So `_called` hands valgebra a function of its own that makes vtjson's call.
+vtjson reads a call that raises as a failure, and so does that function: let
+out, the raise stops valgebra's walk, and a stop is refused by a schema and by
+its `complement` alike, where vtjson's `complement` admits the value.
 
 **Anything else is a constant**, as in vtjson, and valgebra holds most of them as
 a literal. It refuses the objects the typing runtime builds to name a type

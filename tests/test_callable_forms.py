@@ -16,12 +16,20 @@ when the schema is compiled and refuses the schema with `SchemaError` where
 that fails: a callable needing two arguments, or none, or one only by keyword.
 A `typing_extensions.TypeAliasType` is one, a class of its own that is not
 `typing`'s and whose instances take no argument.
+
+The third axis is what the call answers. vtjson reads a call that raises as a
+failure, the same answer as a falsy one, so the value is outside the schema and
+a negation of it admits the value. A raise that stopped the walk instead would
+be refused by the schema and by its negation alike. The axis crosses each
+answer with each position and each combinator that negates: `complement`, and
+the `ifthen` and `cond` built from one.
 """
 
 from __future__ import annotations
 
 import functools
 import operator
+from collections.abc import Iterable
 from typing import TYPE_CHECKING, Annotated, Any, NamedTuple
 
 import pytest
@@ -214,5 +222,69 @@ def test_a_callable_is_refused_where_vtjson_cannot_call_it_with_one_argument(
         != (b := _outcome(vg, lambda: position.wrap(vg, predicate), probe))
     ]
     assert not divergences, f"{label} as {position.name}: " + ", ".join(
+        f"{probe!r} vtjson={a} layer={b}" for probe, a, b in divergences
+    )
+
+
+def _raises(value: object) -> bool:
+    msg = f"no answer for {value!r}"
+    raise ValueError(msg)
+
+
+class _Unanswerable:
+    """An answer whose truth cannot be read."""
+
+    def __bool__(self) -> bool:
+        msg = "no truth"
+        raise ValueError(msg)
+
+
+# Each answer a call can give, by the callable that gives it.
+ANSWERS: list[tuple[str, object]] = [
+    ("truthy", lambda _value: True),
+    ("falsy", lambda _value: False),
+    ("a raise", _raises),
+    ("an answer whose truth raises", lambda _value: _Unanswerable()),
+    ("a generic alias vtjson calls", Iterable[int]),
+]
+
+# Each combinator that negates, and how it is spelled in a library ``m``.
+NEGATIONS: list[tuple[str, Callable[[Any, object], object]]] = [
+    ("as written", lambda _m, s: s),
+    ("complement", lambda m, s: m.complement(s)),
+    ("ifthen", lambda m, s: m.ifthen(s, m.complement(m.anything))),
+    (
+        "cond",
+        lambda m, s: m.cond((s, m.complement(m.anything)), (m.anything, m.anything)),
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    ("negation", "negate"), NEGATIONS, ids=[n[0] for n in NEGATIONS]
+)
+@pytest.mark.parametrize("position", POSITIONS, ids=[p.name for p in POSITIONS])
+@pytest.mark.parametrize(("label", "predicate"), ANSWERS, ids=[a[0] for a in ANSWERS])
+def test_a_call_decides_by_its_answer_under_a_negation(
+    label: str,
+    predicate: object,
+    position: _Position,
+    negation: str,
+    negate: Callable[[Any, object], object],
+) -> None:
+    """A call that raises is a failure, which a negation admits."""
+    divergences = [
+        (probe, a, b)
+        for value in (1, "x")
+        if (
+            a := _outcome(
+                vt,
+                lambda: negate(vt, position.wrap(vt, predicate)),
+                probe := position.lift(value),
+            )
+        )
+        != (b := _outcome(vg, lambda: negate(vg, position.wrap(vg, predicate)), probe))
+    ]
+    assert not divergences, f"{label} as {position.name}, {negation}: " + ", ".join(
         f"{probe!r} vtjson={a} layer={b}" for probe, a, b in divergences
     )
