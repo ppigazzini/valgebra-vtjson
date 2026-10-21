@@ -737,11 +737,12 @@ def _translated_generic(
             return _foreign_generic(schema, origin, dict, open_records=open_records)
         if issubclass(origin, Container):
             return _foreign_generic(schema, origin, list, open_records=open_records)
-    if _is_alias(origin):
+    if _is_alias(origin) or _is_qualifier(origin):
         # vtjson has no rule for a subscripted alias, so it calls `Pair[int]`,
         # and the call raises on every value. valgebra reads the same form as
         # the alias's body with the argument in place, `list[int]`, which
-        # admits what vtjson refuses.
+        # admits what vtjson refuses. A qualifier is the same: valgebra reads
+        # `NotRequired[int]` as `int`, and vtjson calls it.
         return _unplaced(schema)
     try:
         return _validator(schema)
@@ -760,6 +761,27 @@ def _is_alias(origin: object) -> bool:
     extensions = sys.modules.get("typing_extensions")
     classes = (_TYPE_ALIAS, getattr(extensions, "TypeAliasType", None))
     return any(kind is not None and isinstance(origin, kind) for kind in classes)
+
+
+# The qualifiers a `TypedDict` field carries, which valgebra unwraps wherever
+# they are written.
+_QUALIFIER_NAMES = ("Required", "NotRequired", "ReadOnly")
+
+
+def _is_qualifier(origin: object) -> bool:
+    """Whether ``origin`` is a qualifier, `typing`'s or `typing_extensions`'.
+
+    Each module defines a qualifier of its own on a release whose `typing`
+    lacks it, and the second is asked for only once the module is loaded, as
+    `_is_alias` asks.
+    """
+    extensions = sys.modules.get("typing_extensions")
+    return any(
+        origin is getattr(module, name, None)
+        for module in (typing, extensions)
+        for name in _QUALIFIER_NAMES
+        if module is not None
+    )
 
 
 def _unplaced(schema: object) -> CompiledValidator:

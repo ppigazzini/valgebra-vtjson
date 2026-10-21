@@ -150,6 +150,14 @@ valgebra reads the same form as the alias's body with the argument in place,
 `list[int]`, for `typing`'s alias class and `typing_extensions`' alike, so
 `_is_alias` asks about both.
 
+A qualifier goes there too. vtjson calls `NotRequired[int]`, `Required[int]` and
+`ReadOnly[int]` wherever one is a schema, and the call raises: the schema admits
+nothing. valgebra reads each as the type it qualifies. The only place vtjson
+reads a qualifier is the top of a structural class's hint, where
+`_declared_fields` strips a `typing.Required` or `typing.NotRequired` before the
+hint is translated; every other one, `typing`'s or `typing_extensions`',
+reaches `_is_qualifier` and the call.
+
 ## Strictness travels with the translation
 
 vtjson threads strictness as a call-time flag, so it reaches every record the

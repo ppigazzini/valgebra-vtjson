@@ -294,6 +294,12 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `__required_keys__`, which a subclass of another totality, and a qualifier
   written as a string, read apart from vtjson. `protocol` refuses a function,
   as vtjson does once the schema is compiled.
+- A qualifier vtjson does not read for presence admits nothing, as vtjson's
+  call of it does: `Required[int]`, `NotRequired[int]` and `ReadOnly[int]`
+  written as a schema, wherever one sits, and inside a structural class
+  `ReadOnly`, a qualifier inside `Annotated` or another qualifier, and
+  `typing_extensions`' own on a release whose `typing` lacks it. valgebra
+  reads each as the type it qualifies, and the layer handed it over.
 
 ## [0.0.1] - 2026-08-25
 

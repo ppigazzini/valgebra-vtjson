@@ -143,9 +143,11 @@ A field is required as vtjson's `protocol` reads it, which is not always what
 the class's `__required_keys__` says. The class's own `total` decides every
 field it has, inherited ones included, and a `typing.Required` or
 `typing.NotRequired` at the top of a hint overrides it. A qualifier further in,
-and one from `typing_extensions` on a release whose `typing` lacks it, is not
-read for presence. `Annotated` metadata on a hint constrains the field, for
-`protocol` and every structural kind alike.
+`ReadOnly`, and one from `typing_extensions` on a release whose `typing` lacks
+it, is not read for presence. vtjson calls it as the field's schema, the call
+raises, and the field admits nothing, which is what a qualifier written
+anywhere else admits too. `Annotated` metadata on a hint constrains the field,
+for `protocol` and every structural kind alike.
 
 A class that declares no hints constrains nothing, so it admits every value.
 That holds for a bare `collections.namedtuple` used as a schema, which therefore

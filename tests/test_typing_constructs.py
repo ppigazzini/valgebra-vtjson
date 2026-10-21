@@ -13,11 +13,18 @@ a sequence element, a set member, `Annotated` metadata, a union's arm, an
 attribute schema and a generic argument. `P.args` reaches the translator by a
 different arm from the rest, a subscripted generic whose origin is `P`, so a
 position read by one arm and not the other shows here.
+
+A qualifier written outside a class -- `Required[int]`, `NotRequired[int]`,
+`ReadOnly[int]`, from `typing` or `typing_extensions` -- reaches the same
+fallback by the generic arm. It is callable, so vtjson calls it, and the call
+raises on every value: the schema admits nothing. valgebra reads it as the type
+it qualifies.
 """
 
 from __future__ import annotations
 
 import sys
+import typing
 from typing import (
     TYPE_CHECKING,
     Annotated,
@@ -221,3 +228,41 @@ def test_a_typing_construct_is_compared_by_the_question_vtjson_asks(
 ) -> None:
     """A value answering `!=` is refused, whatever it answers to `==`."""
     assert _decide(vg, _T, obj) == _decide(vt, _T, obj)
+
+
+# Each qualifier, from each module that defines it on the running interpreter.
+QUALIFIERS = [
+    pytest.param(form[int], id=f"{module.__name__}.{name}")
+    for module in (typing, typing_extensions)
+    for name in ("Required", "NotRequired", "ReadOnly")
+    if (form := getattr(module, name, None)) is not None
+]
+
+# `Annotated`'s base is a position a qualifier is written in on a class, so it
+# is crossed here beside the ones every typing construct is.
+QUALIFIER_POSITIONS = [
+    *POSITIONS,
+    _Position("Annotated's base", lambda _m, c: Annotated[c, object], lambda v: v),  # ty: ignore[invalid-type-form]
+]
+
+
+@pytest.mark.parametrize(
+    "position", QUALIFIER_POSITIONS, ids=[p.name for p in QUALIFIER_POSITIONS]
+)
+@pytest.mark.parametrize("qualifier", QUALIFIERS)
+def test_a_qualifier_outside_a_class_decides_as_vtjson_does(
+    qualifier: object,
+    position: _Position,
+) -> None:
+    """A qualifier is called, as vtjson calls it, and admits nothing."""
+    reference = position.wrap(vt, qualifier)
+    layer = position.wrap(vg, qualifier)
+    divergences = [
+        (probe, a, b)
+        for value in (1, "x", None, (1,))
+        if (a := _decide(vt, reference, probe := position.lift(value)))
+        != (b := _decide(vg, layer, probe))
+    ]
+    assert not divergences, f"{qualifier} as {position.name}: " + ", ".join(
+        f"{probe!r} vtjson={a} layer={b}" for probe, a, b in divergences
+    )

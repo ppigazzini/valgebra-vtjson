@@ -11,6 +11,12 @@ base declares is optional in a subclass declared `total=False`, whatever
 `__required_keys__` says. A field's name is taken as written, so a name ending
 in `?` is a required key ending in `?`.
 
+A qualifier vtjson does not read for presence stays in the field's schema:
+`ReadOnly`, a `Required` or `NotRequired` inside `Annotated` or inside another
+qualifier, and `typing_extensions`' own on a release whose `typing` lacks it.
+vtjson calls it there, as it calls any qualifier written outside a class, and
+the call raises, so the field admits nothing.
+
 The axis is the field's qualifier crossed with the class's totality and its
 inheritance, with the module whose `TypedDict` builds the class, and with each
 reading that sees the class: the class written as a schema, `protocol(cls,
@@ -76,7 +82,16 @@ def _hints(m: Any) -> dict[str, object]:
             "NotRequired[int]": NotRequired[int],
             "Required[Annotated[int, ge(0)]]": Required[Annotated[int, natural]],
             "NotRequired[Annotated[int, ge(0)]]": NotRequired[Annotated[int, natural]],
+            "Annotated[NotRequired[int], ge(0)]": Annotated[NotRequired[int], natural],
+            "ReadOnly[NotRequired[int]]": typing_extensions.ReadOnly[NotRequired[int]],
+            "NotRequired[ReadOnly[int]]": NotRequired[typing_extensions.ReadOnly[int]],
         }
+    # `typing_extensions`' qualifiers are `typing`'s from the release that
+    # defines each there, and a class of their own before it.
+    hints |= {
+        f"typing_extensions.{name}[int]": getattr(typing_extensions, name)[int]
+        for name in ("Required", "NotRequired", "ReadOnly")
+    }
     return hints
 
 
