@@ -157,23 +157,6 @@ def _deferred(build: Callable[..., CompiledValidator]) -> CompiledValidator:
     return _Deferred(build)  # ty: ignore[invalid-return-type]
 
 
-def _items_match(
-    inner: Mapping[str, CompiledValidator], obj: object, *, open_records: bool
-) -> bool:
-    """Whether ``obj`` is a dict whose items satisfy ``inner``.
-
-    A key ``inner`` does not name is undeclared, so laxness frees it and
-    strictness refuses it — the same rule a record follows.
-    """
-    if not isinstance(obj, _DICT):
-        return False
-    if not open_records and any(key not in inner for key in obj):
-        return False
-    return all(
-        key in obj and validator.is_valid(obj[key]) for key, validator in inner.items()
-    )
-
-
 def _attributes_match(inner: Mapping[Any, CompiledValidator], obj: object) -> bool:
     """Whether ``obj`` carries every attribute in ``inner``, each satisfying it."""
     for name, validator in inner.items():
@@ -205,51 +188,73 @@ def _structural(
 
     The value's own class is not consulted, so two classes declaring the same
     hints are the same schema and a wider class satisfies a narrower one. With
-    ``as_dict`` the hints are matched against a mapping's items, otherwise
-    against the value's attributes.
+    ``as_dict`` the hints are matched against a mapping's items, as the dict
+    schema vtjson builds from them, otherwise against the value's attributes.
 
     A class declaring no hints constrains nothing, so the schema it makes admits
     every value. Refusing that is a divergence: vtjson refuses only a schema it
     cannot read hints *from*, which is one carrying no annotations at all.
     """
     _annotated(schema)
-    inner = {
-        name: _translate(hint, open_records=open_records)
-        for name, hint in get_type_hints(schema).items()
-    }
+    declared = _declared_fields(schema)
     if as_dict:
-        return _predicate(
-            lambda obj: _items_match(inner, obj, open_records=open_records)
-        )
+        # A `TypedDict` denotes an open set, and valgebra reads it that way;
+        # vtjson reads the declaration as a record refusing a key it does not
+        # declare, so the record is built from the declaration, and
+        # `open_records` frees every key as it does for every other record.
+        record: dict[object, object] = {
+            optional_key(name, _optional=optional): hint
+            for name, optional, hint in declared
+        }
+        return _translate_dict(record, open_records=open_records)
     # An attribute schema declares no key, so laxness has nothing to free here.
+    # vtjson reads an optional attribute the value lacks anyway, and the read
+    # raises out of `validate`; the value is rejected here, so an optional
+    # attribute decides as a required one does.
+    inner = {
+        name: _translate(hint, open_records=open_records) for name, _, hint in declared
+    }
     return _predicate(lambda obj: _attributes_match(inner, obj))
 
 
-def _typed_dict_record(schema: object, *, open_records: bool) -> CompiledValidator:
-    """Build the record a ``TypedDict`` declaration names, with no other key.
+# vtjson reads the presence qualifiers from `typing` alone, which defines them
+# from 3.11; on an older release one from `typing_extensions` is a hint like
+# any other.
+_REQUIRED = getattr(typing, "Required", None)
+_NOT_REQUIRED = getattr(typing, "NotRequired", None)
 
-    A ``TypedDict`` denotes an **open** set: the typing spec assigns it every
-    dict carrying the declared keys, whatever else it carries, and valgebra
-    reads it that way -- a record beside a ``str`` clause. vtjson reads the same
-    declaration as a record and refuses a key it does not declare, so the record
-    is built from the declaration rather than narrowed out of valgebra's reading
-    of it. Closing a mapping keeps the clauses it carries, and that ``str``
-    clause is the one vtjson does not have; built from the declaration there is
-    no clause to keep, and ``open_records`` frees every key as it does for every
-    other record this module builds.
 
-    A key is required unless the declaration says otherwise, which is what the
-    trailing ``?`` spells. ``is_typeddict`` is not a type guard, so the two
-    attributes the class carries are read by name.
+def _declared_fields(schema: object) -> list[tuple[str, bool, object]]:
+    """Return the fields ``schema``'s hints declare, as vtjson's `_to_dict` reads them.
+
+    Each is its name as written, whether it is optional, and the schema its
+    hint gives. The hints are read
+    with their qualifiers and their `Annotated` metadata kept, and presence by
+    the class's own `__total__` and a `Required` or `NotRequired` at the top of
+    a hint, which is stripped: a field of a total class is required unless it
+    says `NotRequired`, and one of a class that is not total is optional unless
+    it says `Required`. `__required_keys__` is not asked, so a field a total
+    base declares is optional in a subclass declared `total=False`, and a
+    qualifier written as a string under `from __future__ import annotations`,
+    which the class's own key sets cannot see, still counts. A schema that is
+    not a class has no hints vtjson reads.
     """
-    required: frozenset[str] = getattr(schema, "__required_keys__", frozenset())
-    return _translate_dict(
-        {
-            name if name in required else f"{name}?": hint
-            for name, hint in get_type_hints(schema, include_extras=True).items()
-        },
-        open_records=open_records,
-    )
+    if not isinstance(schema, type):
+        msg = f"the schema {schema!r} does not have type hints"
+        raise SchemaError(msg)
+    total = getattr(schema, "__total__", True)
+    if not isinstance(total, bool):
+        total = True
+    declared: list[tuple[str, bool, object]] = []
+    for name, hint in get_type_hints(schema, include_extras=True).items():
+        origin = get_origin(hint)
+        qualified = origin is not None and origin in (_REQUIRED, _NOT_REQUIRED)
+        if total:
+            optional = qualified and origin is _NOT_REQUIRED
+        else:
+            optional = not (qualified and origin is _REQUIRED)
+        declared.append((name, optional, get_args(hint)[0] if qualified else hint))
+    return declared
 
 
 def _predicate(check: object) -> CompiledValidator:
@@ -917,9 +922,9 @@ def _translate_type(schema: type, *, open_records: bool = False) -> CompiledVali
     # Any other class is an instance check, which is what vtjson gives a plain
     # type. valgebra reads an Enum the same way, so it translates directly; a
     # `TypedDict` and a dataclass are the declarations the two read
-    # differently, and `_typed_dict_record` and `_instance_check` say how.
+    # differently, and `_structural` and `_instance_check` say how.
     if is_typeddict(schema):
-        return _typed_dict_record(schema, open_records=open_records)
+        return _structural(schema, as_dict=True, open_records=open_records)
     return _instance_check(schema)
 
 

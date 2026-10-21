@@ -150,14 +150,22 @@ def test_a_class_schema_decides_as_vtjson_does(label: str, schema: object) -> No
     )
 
 
+def _hinted(a: int) -> int:
+    """Return ``a``; a function carries hints, and is not a class."""
+    return a
+
+
 # `protocol` refuses a schema it cannot read hints from at all. Carrying an
 # empty `__annotations__` is not that: it is a class that constrains nothing.
+# A function carries hints, and vtjson refuses it when the schema is compiled,
+# since it reads the hints of a class alone.
 GATE: list[tuple[str, object]] = [
     ("object", object),
     ("int", int),
     ("a class with no annotations of its own", _NoHints),
     ("a bare namedtuple", _Bare),
     ("a TypedDict", _Row),
+    ("a function", _hinted),
 ]
 
 
@@ -170,8 +178,8 @@ def test_protocol_refuses_the_same_schemas_vtjson_refuses(
     def outcome(module: Any, construct: Callable[[object], object]) -> str:
         try:
             schema = construct(cls)
+            return f"builds/{_decide(module, schema, 12345)}"
         except module.SchemaError:
             return "SchemaError"
-        return f"builds/{_decide(module, schema, 12345)}"
 
     assert outcome(vg, vg.protocol) == outcome(vt, vt.protocol), label

@@ -286,6 +286,14 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   required if either spelling is. The layer read `\?` as a field named `a\`,
   read `fields` names as written, and spelled `optional_key` as a string, so a
   key of another type, or a required one ending in `?`, could not be written.
+- A `TypedDict`, a `Protocol`, a `NamedTuple` and `protocol` read a class's
+  fields as vtjson does: a field is required by the class's own `total` and a
+  `typing.Required` or `typing.NotRequired` at the top of its hint, inherited
+  fields included, and `Annotated` metadata constrains it. `protocol` dropped
+  the metadata and required every field, and a `TypedDict` read
+  `__required_keys__`, which a subclass of another totality, and a qualifier
+  written as a string, read apart from vtjson. `protocol` refuses a function,
+  as vtjson does once the schema is compiled.
 
 ## [0.0.1] - 2026-08-25
 

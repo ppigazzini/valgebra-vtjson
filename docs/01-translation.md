@@ -109,7 +109,21 @@ belongs, and so does a wider one.
 Hints are read once, when the schema is built. A class declaring none constrains
 nothing and admits every value — including a bare `collections.namedtuple`,
 which admits every tuple. Refusing that would be a divergence, and the refusal
-vtjson does make is narrower: a class carrying no annotations at all.
+vtjson does make is narrower: a class carrying no annotations at all, and, once
+the schema is compiled, anything carrying them that is not a class.
+
+`_declared_fields` reads the hints as vtjson's `_to_dict` does, for every
+structural kind and for `protocol`: with their qualifiers and their `Annotated`
+metadata kept, and presence decided by the class's own `__total__` and a
+`Required` or `NotRequired` at the top of a hint, which is stripped. A field of a
+total class is required unless it says `NotRequired`, and one of a class that is
+not total is optional unless it says `Required`. vtjson reads only `typing`'s
+qualifiers, so from 3.11, and never asks `__required_keys__`: a field a total
+base declares is optional in a subclass declared `total=False`, and a qualifier
+written as a string under `from __future__ import annotations`, which the class's
+own key sets cannot see, still counts. Read against a mapping, the fields are the
+dict schema vtjson builds from them, each named as written, so a field named `a?`
+is a required key ending in `?`.
 
 ## A generic is read by what its origin is
 
