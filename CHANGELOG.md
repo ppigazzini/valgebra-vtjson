@@ -8,6 +8,25 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- valgebra 0.0.19 or later. valgebra reads the walk inside a complement in
+  Kleene's strong logic: a part that refutes a value refutes it whatever a part
+  beside it stopped on, where the walk answered by the part it met first. A
+  walk stops at a callable that raised and at the bound on how deep it reads a
+  value; vtjson reads a raising callable as a failure and a deep value to its
+  last level. On 0.0.18 `complement`, `ifthen` and `cond` refused a list or a
+  tuple whose first element stopped the walk and whose second refuted, which
+  vtjson admits, and admitted a member whose union of scalars sat at the bound,
+  which vtjson refuses. On 0.0.19 each reaches vtjson's verdict through the
+  nodes the layer already builds, and no other verdict moves: the suite passes
+  1,408 tests on 3.14 and on the free-threaded 3.14t, 1,407 on 3.13, 1,385 on
+  3.12, 1,294 on 3.11 and 1,289 on the 3.10 floor, against the pinned oracle.
+
+    `docs/06-performance.md` is measured on it, with 0.0.18 interleaved in the
+    same session: the heterogeneous mapping `{str: int, int: bool}` reads 58%
+    slower, in valgebra's own walk of the map, and the prefix-and-tail list
+    10% faster, runs that do not overlap; every other family lands within the
+    spread of its own runs.
+
 - valgebra 0.0.18 or later. valgebra reads a subscripted type alias as the
   alias's body with the arguments in place, `Pair[int]` from `type Pair[T] =
   list[T]` as `list[int]`, for `typing`'s alias class and `typing_extensions`'
