@@ -8,6 +8,21 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- valgebra 0.0.20 or later. Its relations decide `subset` questions the layer
+  does not ask, and building a validator runs none of them; it reads a marker
+  class answering through a `__getattribute__` of its own, and the layer
+  translates every `Annotated` item before valgebra reads it. Where valgebra
+  reads a list through a copy, on CPython 3.10 and 3.11, it holds the collector
+  off for the copy, so a finalizer emptying the list under it cannot end the
+  process. Every test reaches the outcome it reached on 0.0.19: 2,025 tests on
+  3.14 and on the free-threaded 3.14t, 2,024 on 3.13, 1,990 on 3.12, 1,899 on
+  3.11 and 1,685 on the 3.10 floor, against the pinned oracle.
+
+    `docs/06-performance.md` is measured on it, with 0.0.19 interleaved in the
+    same session: the heterogeneous mapping `{str: int, int: bool}` reads 45%
+    faster, the fifty-entry `{str: int}` 29% faster and the prefix-and-tail
+    list 7% faster, runs that do not overlap, and no family reads slower.
+
 - valgebra 0.0.19 or later. valgebra reads the walk inside a complement in
   Kleene's strong logic: a part that refutes a value refutes it whatever a part
   beside it stopped on, where the walk answered by the part it met first. A
