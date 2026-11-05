@@ -95,6 +95,16 @@ uv run ty check
   [04-interpreters.md](04-interpreters.md) — including the *build*, since a
   version and a build are not the same interpreter.
 
+## The API sweep, so no parameter goes unasked
+
+`tests/test_oracle_api_sweep.py` is this repository's own sweep of vtjson's public
+API. It is not derived from `test_vtjson.py`, vtjson's suite in its repository,
+and it states no expected verdict: every row is the two libraries answering one
+call. It crosses every public name, at every parameter it declares, with where the
+schema sits and how the question is asked, and it fails on a name or a parameter no
+hand-written row reaches. Each parameter is also driven through values a caller
+might pass by mistake, which is where the argument checks part.
+
 ## The inventory, so the surface cannot drift
 
 A test classifies every name on vtjson's public surface as supported, ledgered,

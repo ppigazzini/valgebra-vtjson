@@ -208,6 +208,11 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `tests/test_oracle_api_sweep.py`, this repository's differential sweep of
+  vtjson's public API: every public name at every parameter it declares, crossed
+  with where the schema sits and how the question is asked, and failing on a name
+  or a parameter no row reaches. It is not derived from vtjson's own `test_vtjson.py`.
+
 - A schema that contains itself is a recursive schema. A record holding itself,
   or two that reach each other, denote the least set closed under their shape,
   so a shape reachable only through infinite nesting has no finite member and
@@ -224,6 +229,37 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   builds.
 
 ### Fixed
+
+- A typing union written as a dict key is a clause over the keys it matches, as
+  any other schema is. `{int | None: str}`, `{Optional[int]: str}` and
+  `{Union[int, str]: str}` were read as a key the value must carry, and refused
+  every mapping. Bytes and a hashable sequence or mapping read the same way, since
+  vtjson takes a key for a constant only where it compiles to one.
+
+- `compile` leaves the mode open, as vtjson's does: `validate(compile(schema), obj,
+  strict=False)` frees a record's undeclared keys, where the schema stayed strict.
+
+- A subscripted tuple reads as a tuple written out, so laxness frees the positions
+  after `tuple[int, str]`, and a `...` anywhere but last is dropped from a list or a
+  tuple rather than read as a constant.
+
+- A construct written bare reads as vtjson reads its class. `ge`, `regex` and the
+  others needing an argument are a `SchemaError`, `keys` and its like are their own
+  call, and `union` and the other wrappers admit nothing, where each was called on
+  the value and admitted everything. `anything()` and `nothing()` are calls.
+
+- A `nan` bound refuses every value where it raised `ValueError`, a `Decimal` NaN
+  bound is a `SchemaError`, and a bound written in a subclass of a builtin is asked
+  its own comparison rather than read as the value it stores.
+
+- Arguments are checked as vtjson checks them: `close_to`'s tolerances, `filter`'s
+  `filter_name`, `set_name`'s `reason`, `set_label`'s `debug` and `protocol`'s `dict`
+  are a `SchemaError`, and `glob`'s and `magic`'s `name` is taken as it is.
+
+- Two keys that build one validator stay two clauses, `{int: str, union(int):
+  bytes}`, where the later replaced the earlier. A regex whose match raises fails
+  rather than stopping the walk, so its `complement` admits the value. `make_type`
+  names a type as vtjson does, and compiles when a value is first asked about.
 
 - `size` decides at an end past `sys.maxsize`, which `len` cannot answer: a lower
   end admits nothing and an upper end bounds nothing, where valgebra's refusal of

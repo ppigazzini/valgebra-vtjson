@@ -8,9 +8,11 @@ cannot handle, mirroring vtjson's reject.
 """
 
 import math
+import operator
 import sys
 from collections.abc import Callable, Mapping
 from types import EllipsisType
+from typing import Any
 
 from ._translate import (
     SchemaError,
@@ -19,6 +21,7 @@ from ._translate import (
     _bound,
     _deferred,
     _integer,
+    _needs_arguments,
     _nullary,
     _number,
     _predicate,
@@ -26,6 +29,7 @@ from ._translate import (
     _structural,
     _text,
     _translate,
+    _wrapper_class,
     optional_key,
 )
 from ._valgebra_api import (
@@ -49,27 +53,73 @@ from ._valgebra_api import (
     validator as _validator,
 )
 
+# What vtjson asks of a bound and a value, in that order.
+_ASKED: dict[str, Callable[[Any, Any], bool]] = {
+    "gt": operator.lt,
+    "ge": operator.le,
+    "lt": operator.gt,
+    "le": operator.ge,
+}
 
+
+# The builtins whose subclasses valgebra's walk reads by the value they store.
+_STORED = (int, float, str, bytes)
+
+
+def _reads_its_own_order(bound: object) -> bool:
+    """Whether ``bound`` is a subclass of a builtin, rather than the builtin."""
+    return isinstance(bound, _STORED) and type(bound) not in (*_STORED, bool)
+
+
+def _ordered(**bounds: object) -> CompiledValidator:
+    """Build the values each bound orders, whichever bound valgebra refuses.
+
+    valgebra refuses a bound that orders no value, `nan`, when it is built. vtjson
+    takes it, and every comparison with it answers false, so a refusal let out
+    here would raise where vtjson decides. valgebra's walk also reads a bound
+    written in a subclass of a builtin as the value it stores, where vtjson asks
+    the subclass's own comparison. The predicate asks vtjson's question.
+    """
+
+    def check(obj: object) -> bool:
+        try:
+            return all(_ASKED[name](bound, obj) for name, bound in bounds.items())
+        except Exception:  # noqa: BLE001  (vtjson reads a raise as a failure)
+            return False
+
+    if any(_reads_its_own_order(bound) for bound in bounds.values()):
+        return _predicate(check)
+    try:
+        return refined(**bounds)
+    except ValueError:
+        return _predicate(check)
+
+
+@_needs_arguments
 def gt(lb: object) -> CompiledValidator:
     """Values strictly greater than ``lb``."""
-    return refined(gt=_bound(lb, "lower"))
+    return _ordered(gt=_bound(lb, "lower"))
 
 
+@_needs_arguments
 def ge(lb: object) -> CompiledValidator:
     """Values greater than or equal to ``lb``."""
-    return refined(ge=_bound(lb, "lower"))
+    return _ordered(ge=_bound(lb, "lower"))
 
 
+@_needs_arguments
 def lt(ub: object) -> CompiledValidator:
     """Values strictly less than ``ub``."""
-    return refined(lt=_bound(ub, "upper"))
+    return _ordered(lt=_bound(ub, "upper"))
 
 
+@_needs_arguments
 def le(ub: object) -> CompiledValidator:
     """Values less than or equal to ``ub``."""
-    return refined(le=_bound(ub, "upper"))
+    return _ordered(le=_bound(ub, "upper"))
 
 
+@_needs_arguments
 def interval(
     lb: object,
     ub: object,
@@ -92,12 +142,13 @@ def interval(
         # denotes no set of values.
         try:
             _ = lb <= ub  # ty: ignore[unsupported-operator]
-        except TypeError as exc:
+        except Exception as exc:
             msg = f"the bounds {lb!r} and {ub!r} do not support comparison"
             raise SchemaError(msg) from exc
-    return refined(**bounds)
+    return _ordered(**bounds)
 
 
+@_needs_arguments
 def size(lb: int, ub: int | EllipsisType | None = None) -> CompiledValidator:
     """Values whose ``len`` is bounded by ``lb`` and ``ub``.
 
@@ -127,6 +178,7 @@ def size(lb: int, ub: int | EllipsisType | None = None) -> CompiledValidator:
     return refined(**bounds)
 
 
+@_wrapper_class
 def union(*schemas: object) -> CompiledValidator:
     """Return the union of the given schemas (a value matching any of them)."""
     return _deferred(
@@ -136,6 +188,7 @@ def union(*schemas: object) -> CompiledValidator:
     )
 
 
+@_wrapper_class
 def intersect(*schemas: object) -> CompiledValidator:
     """Return the intersection of the given schemas (matching all of them)."""
     return _deferred(
@@ -145,6 +198,7 @@ def intersect(*schemas: object) -> CompiledValidator:
     )
 
 
+@_wrapper_class
 def complement(schema: object) -> CompiledValidator:
     """Return the complement of the given schema (a value not matching it)."""
     return _deferred(
@@ -154,6 +208,7 @@ def complement(schema: object) -> CompiledValidator:
     )
 
 
+@_wrapper_class
 def ifthen(
     if_schema: object,
     then_schema: object,
@@ -176,6 +231,7 @@ def ifthen(
     )
 
 
+@_wrapper_class
 def cond(*args: tuple[object, object]) -> CompiledValidator:
     """Select the ``then`` of the first matching ``(condition, then)`` case.
 
@@ -240,21 +296,25 @@ def _counted(
     return present is not None and accept(present)
 
 
+@_nullary
 def keys(*required: object) -> CompiledValidator:
     """Require every listed key to be present."""
     return _predicate(lambda obj: _counted(required, obj, lambda n: n == len(required)))
 
 
+@_nullary
 def one_of(*candidates: object) -> CompiledValidator:
     """Require exactly one of the listed keys to be present."""
     return _predicate(lambda obj: _counted(candidates, obj, lambda n: n == 1))
 
 
+@_nullary
 def at_least_one_of(*candidates: object) -> CompiledValidator:
     """Require at least one of the listed keys to be present."""
     return _predicate(lambda obj: _counted(candidates, obj, lambda n: n >= 1))
 
 
+@_nullary
 def at_most_one_of(*candidates: object) -> CompiledValidator:
     """Require at most one of the listed keys to be present."""
     return _predicate(lambda obj: _counted(candidates, obj, lambda n: n <= 1))
@@ -279,6 +339,7 @@ def _all_distinct(obj: object) -> bool:
         return all(a != b for i, a in enumerate(items) for b in items[i + 1 :])
 
 
+@_needs_arguments
 def div(divisor: int, remainder: int = 0, name: str | None = None) -> CompiledValidator:
     """Require an ``int`` with ``value % divisor == remainder`` (floats reject)."""
     del name  # accepted for vtjson signature parity; unused
@@ -309,6 +370,7 @@ def div(divisor: int, remainder: int = 0, name: str | None = None) -> CompiledVa
     return _predicate(check)
 
 
+@_needs_arguments
 def close_to(
     x: float,
     rel_tol: float | None = None,
@@ -318,9 +380,9 @@ def close_to(
     _number(x, "value")
     tolerances: dict[str, float] = {}
     if rel_tol is not None:
-        tolerances["rel_tol"] = rel_tol
+        tolerances["rel_tol"] = _number(rel_tol, "relative tolerance")
     if abs_tol is not None:
-        tolerances["abs_tol"] = abs_tol
+        tolerances["abs_tol"] = _number(abs_tol, "absolute tolerance")
 
     def check(obj: object) -> bool:
         # `math.isclose` reads a `Decimal` or a `Fraction` happily; vtjson counts
@@ -336,12 +398,15 @@ def close_to(
     return _predicate(check)
 
 
+@_wrapper_class
 def filter(  # noqa: A001  (mirrors vtjson's public name)
     filter: object,  # noqa: A002  (mirrors vtjson's parameter name)
     schema: object,
     filter_name: str | None = None,
 ) -> CompiledValidator:
     """Validate ``schema`` against ``filter(value)`` (a transform-then-check)."""
+    if filter_name is not None:
+        _text(filter_name, "filter name")
     del filter_name  # accepted for vtjson signature parity; unused
     if not callable(filter):
         msg = "the filter is not callable"
@@ -361,6 +426,7 @@ def filter(  # noqa: A001  (mirrors vtjson's public name)
     return _deferred(build)
 
 
+@_wrapper_class
 def fields(d: Mapping[object, object]) -> CompiledValidator:
     """Require each attribute named in ``d`` to be present and match its schema.
 
@@ -393,6 +459,7 @@ def fields(d: Mapping[object, object]) -> CompiledValidator:
     return _deferred(build)
 
 
+@_wrapper_class
 def protocol(schema: object, dict: bool = False) -> CompiledValidator:  # noqa: A002, FBT001, FBT002
     """Structurally check the type hints of ``schema`` (a class).
 
@@ -404,6 +471,9 @@ def protocol(schema: object, dict: bool = False) -> CompiledValidator:  # noqa: 
     # The gate is asked here rather than inside the deferred build: vtjson
     # refuses this schema when it is written, and a construct that refuses its
     # arguments only once a value arrives is not a construction-time check.
+    if not isinstance(dict, bool):
+        msg = f"the dict flag {dict!r} is not a boolean"
+        raise SchemaError(msg)
     _annotated(schema)
     return _deferred(
         lambda *, open_records: _structural(
@@ -412,20 +482,26 @@ def protocol(schema: object, dict: bool = False) -> CompiledValidator:  # noqa: 
     )
 
 
+@_wrapper_class
 def quote(schema: object) -> CompiledValidator:
     """Match ``schema`` as a literal by equality, not as a schema to interpret."""
     return _predicate(lambda obj: obj == schema)
 
 
+@_wrapper_class
 def set_name(schema: object, name: str, reason: bool = False) -> CompiledValidator:  # noqa: FBT001, FBT002
     """Accept vtjson's ``set_name``; the name is cosmetic, so it is ignored."""
     _text(name, "name")
+    if not isinstance(reason, bool):
+        msg = f"the reason flag {reason!r} is not a boolean"
+        raise SchemaError(msg)
     del name, reason
     return _deferred(
         lambda *, open_records: _translate(schema, open_records=open_records)
     )
 
 
+@_wrapper_class
 def set_label(schema: object, *labels: str, debug: bool = False) -> CompiledValidator:
     """Accept vtjson's ``set_label``; the labels are ignored.
 
@@ -440,6 +516,9 @@ def set_label(schema: object, *labels: str, debug: bool = False) -> CompiledVali
     """
     for label in labels:
         _text(label, "label")
+    if not isinstance(debug, bool):
+        msg = f"the debug flag {debug!r} is not a boolean"
+        raise SchemaError(msg)
     del labels, debug
     return _deferred(_in_own_mode(schema, open_records=False))
 
@@ -478,13 +557,19 @@ def make_type(
             "express recursion with valgebra's recursive fixpoint"
         )
         raise NotImplementedError(msg)
-    validator = _translate(schema, open_records=not strict)
+    # vtjson compiles the schema when a value is first asked about, so a schema it
+    # refuses is refused by `isinstance` rather than here.
+    validators: list[CompiledValidator] = []
+    if name is None:
+        name = str(schema.__name__) if hasattr(schema, "__name__") else "schema"
 
     class _Meta(type):
         def __instancecheck__(cls, instance: object) -> bool:
-            return validator.is_valid(instance)
+            if not validators:
+                validators.append(_translate(schema, open_records=not strict))
+            return validators[0].is_valid(instance)
 
-    return _Meta(name or "valgebra_type", (), {})
+    return _Meta(name, (), {})
 
 
 def safe_cast(schema: object, obj: object) -> object:
@@ -492,6 +577,7 @@ def safe_cast(schema: object, obj: object) -> object:
     return _translate(schema).ensure(obj)
 
 
+@_wrapper_class
 def lax(schema: object) -> CompiledValidator:
     """Admit a key no clause of its record claims, throughout the subtree.
 
@@ -506,6 +592,7 @@ def lax(schema: object) -> CompiledValidator:
     return _deferred(_in_own_mode(schema, open_records=True))
 
 
+@_wrapper_class
 def strict(schema: object) -> CompiledValidator:
     """Reject a key no clause of its record claims, throughout the subtree.
 

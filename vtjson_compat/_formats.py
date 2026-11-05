@@ -14,10 +14,18 @@ import pathlib
 import re
 from urllib.parse import urlparse
 
-from ._translate import SchemaError, _nullary, _predicate, _require, _text
+from ._translate import (
+    SchemaError,
+    _needs_arguments,
+    _nullary,
+    _predicate,
+    _require,
+    _text,
+)
 from ._valgebra_api import CompiledValidator
 
 
+@_needs_arguments
 def regex(
     regex: str,
     name: str | None = None,
@@ -30,11 +38,20 @@ def regex(
     del name  # accepted for vtjson signature parity; unused
     try:
         compiled = re.compile(regex, flags)
-    except (re.error, TypeError, ValueError) as exc:
+    except Exception as exc:
         msg = f"{regex!r} is an invalid regular expression: {exc}"
         raise SchemaError(msg) from exc
     match = compiled.fullmatch if fullmatch else compiled.match
-    return _predicate(lambda obj: isinstance(obj, str) and match(obj) is not None)
+
+    def check(obj: object) -> bool:
+        if not isinstance(obj, str):
+            return False
+        try:
+            return match(obj) is not None
+        except Exception:  # noqa: BLE001  (vtjson reads a raise as a failure)
+            return False
+
+    return _predicate(check)
 
 
 @_nullary
@@ -53,16 +70,15 @@ def regex_pattern() -> CompiledValidator:
     return _predicate(check)
 
 
+@_needs_arguments
 def glob(pattern: str, name: str | None = None) -> CompiledValidator:
     """Match strings against a Unix filename pattern (``PurePath.match``)."""
-    if name is not None:
-        _text(name, "glob name")
     del name  # accepted for vtjson signature parity; unused
     # Probe the pattern once, so a pattern no path can be matched against is a
     # malformed schema rather than a validator that rejects every value.
     try:
         pathlib.PurePath("a").match(pattern)
-    except (ValueError, TypeError) as exc:
+    except Exception as exc:
         msg = f"{pattern!r} is not a valid filename pattern: {exc}"
         raise SchemaError(msg) from exc
 
@@ -222,6 +238,7 @@ def domain_name(
     return _predicate(check)
 
 
+@_needs_arguments
 def magic(mime_type: str, name: str | None = None) -> CompiledValidator:
     """Match a buffer whose libmagic MIME type equals ``mime_type``.
 
@@ -229,8 +246,6 @@ def magic(mime_type: str, name: str | None = None) -> CompiledValidator:
     library); install it with ``pip install valgebra-vtjson[magic]``.
     """
     _text(mime_type, "mime type")
-    if name is not None:
-        _text(name, "magic name")
     detector = _require("magic", "magic")
     del name
 

@@ -82,7 +82,7 @@ def _bound(value: object, role: str) -> object:
         # Whether the operator exists at all is the question being asked, so
         # the checker cannot be expected to know that it does.
         _ = value <= value  # noqa: PLR0124  # ty: ignore[unsupported-operator]
-    except TypeError as exc:
+    except Exception as exc:
         msg = f"the {role} bound {value!r} does not support comparison"
         raise SchemaError(msg) from exc
     return value
@@ -129,7 +129,9 @@ class _Deferred:
     on its own is a validator like any other.
     """
 
-    __slots__ = ("_build", "_settled")
+    # `is_valid` is the one attribute `_compiled` serves without `__getattr__`,
+    # since a schema compiled once is asked it on the hot path.
+    __slots__ = ("_build", "_settled", "is_valid")
 
     def __init__(self, build: Callable[..., CompiledValidator]) -> None:
         self._build = build
@@ -146,6 +148,24 @@ class _Deferred:
 
     def __repr__(self) -> str:
         return repr(self._under(open_records=False))
+
+
+def _compiled(schema: object) -> CompiledValidator:
+    """Compile ``schema`` once, leaving open the mode it validates under.
+
+    vtjson's `compile` refuses a schema when it is called and takes `strict` when
+    the compiled schema validates, so both modes are built here, once. Where they
+    are one set the mode decides nothing, and the validator is returned as it is.
+    """
+    strict = _translate(schema)
+    lax = _translate(schema, open_records=True)
+    if strict == lax:
+        return strict
+    builds = {False: strict, True: lax}
+    waiting = _Deferred(lambda *, open_records: builds[open_records])
+    waiting._settled = strict  # noqa: SLF001
+    waiting.is_valid = strict.is_valid
+    return waiting  # ty: ignore[invalid-return-type]
 
 
 def _deferred(build: Callable[..., CompiledValidator]) -> CompiledValidator:
@@ -344,9 +364,10 @@ def _equal_to(schema: object) -> CompiledValidator:
     return _predicate(lambda obj: not obj != schema)  # noqa: SIM202  (vtjson asks `!=`)
 
 
-def _nullary(
-    func: Callable[..., CompiledValidator],
-) -> Callable[..., CompiledValidator]:
+_Factory = TypeVar("_Factory", bound=Callable[..., CompiledValidator])
+
+
+def _nullary(func: _Factory) -> _Factory:
     """Tag a construct factory vtjson also accepts bare, without a call.
 
     vtjson auto-instantiates a bare construct *class* used as a schema (e.g.
@@ -357,6 +378,38 @@ def _nullary(
     """
     func.__dict__["_vtjson_nullary"] = True
     return func
+
+
+def _needs_arguments(func: _Factory) -> _Factory:
+    """Tag a construct whose class vtjson cannot instantiate without arguments.
+
+    vtjson instantiates a bare construct class when it compiles one, and refuses
+    the schema where that fails. Called on the value instead, the factory would
+    answer a validator, whose truth admits everything.
+    """
+    func.__dict__["_vtjson_bare"] = _refused_bare
+    return func
+
+
+def _wrapper_class(func: _Factory) -> _Factory:
+    """Tag a construct whose class vtjson reads bare as an instance check.
+
+    vtjson instantiates only what derives from `compiled_schema`, and `union`
+    and its like do not, so a bare one is a class like any other. No value here
+    is an instance of a construct the layer writes as a function, so it admits
+    nothing.
+    """
+    func.__dict__["_vtjson_bare"] = _admitting_nothing
+    return func
+
+
+def _refused_bare(schema: Callable[..., object]) -> CompiledValidator:
+    msg = f"{_name(schema)!r} does not have a no-argument constructor"
+    raise SchemaError(msg)
+
+
+def _admitting_nothing(_schema: Callable[..., object]) -> CompiledValidator:
+    return _complement(_validator(_anything))
 
 
 def _require(module: str, extra: str) -> object:
@@ -693,15 +746,22 @@ def _translate_leaf(
             schema, origin, exact=exact, open_records=open_records
         )
     if callable(schema):
-        if getattr(schema, "_vtjson_nullary", False):
-            # A bare nullary construct, like vtjson's auto-instantiated bare class.
-            return _translate(schema())
-        # A bare callable is a predicate over any value (the vtjson convention).
-        return _called(schema)
+        return _translate_callable(schema)
     if isinstance(schema, float) and not exact:
         return _near(schema)
     # Anything else is an exact-value constant matched by equality.
     return _constant(schema)
+
+
+def _translate_callable(schema: Callable[..., object]) -> CompiledValidator:
+    """Translate a callable written as a schema, by which kind it is."""
+    if getattr(schema, "_vtjson_nullary", False):
+        # A bare nullary construct, like vtjson's auto-instantiated bare class.
+        return _translate(schema())
+    if inspect.isfunction(schema) and "_vtjson_bare" in schema.__dict__:
+        return schema.__dict__["_vtjson_bare"](schema)
+    # A bare callable is a predicate over any value (the vtjson convention).
+    return _called(schema)
 
 
 # The generics whose arguments are schemas. Both spellings of a union are listed:
@@ -719,6 +779,10 @@ def _translated_generic(
     the value must be an instance of the origin as well. The rule is not
     restricted to the builtins, so `Sequence[int]` and `deque[int]` are schemas.
     """
+    if origin is tuple:
+        # vtjson reads a tuple's arguments as it reads a tuple written out, so a
+        # `...` among them and laxness over the positions after them read alike.
+        return _translate_tuple(get_args(schema), open_records=open_records)
     if origin in _PARAMETERISED:
         kind = _COUNTED.get(origin)
         if kind is not None:
@@ -941,11 +1005,18 @@ def _translate_list(
     # is a homogeneous list and `[A, ..., Z, ...]` is a fixed prefix then the last
     # element repeated; `[A, B, C]` is a fixed-length positional list; `[]`
     # matches only the empty list. valgebra's native list form expresses each.
+    # vtjson drops every `...` before reading the rest, so one anywhere else
+    # denotes no position, and `[...]` repeats `object`.
+    declared = [
+        _translate(item, open_records=open_records)
+        for item in schema
+        if item is not Ellipsis
+    ]
     if schema and schema[-1] is Ellipsis:
         # Every position is declared by the repeat, so laxness has nothing to free.
-        prefix = [_translate(item, open_records=open_records) for item in schema[:-1]]
-        return _of_own_class(schema, _validator([*prefix, ...]))
-    declared = [_translate(item, open_records=open_records) for item in schema]
+        repeated = declared if len(schema) > 1 else [_validator(_anything)]
+        # vtjson indexes the last element here, and `[..., ...]` has none.
+        return _of_own_class(schema, _validator([*repeated[:-1], repeated[-1], ...]))
     if open_records:
         # A sequence declares positions the way a record declares keys: laxly the
         # ones it does not declare are free, so an unconstrained element repeats
@@ -963,16 +1034,20 @@ def _translate_tuple(
     # repeats after a fixed prefix. valgebra's frontend expresses every tuple
     # shape, so `(T, ...)`, the prefix form `(A, B, ...)`, and the fixed-length
     # `(A, B, C)` all translate. The subscription drives the frontend at runtime,
-    # not as a static type.
+    # not as a static type. vtjson drops every `...` before reading the rest, as
+    # it does for a list.
+    fixed = tuple(
+        _translate(item, open_records=open_records)
+        for item in schema
+        if item is not Ellipsis
+    )
     if schema and schema[-1] is Ellipsis:
-        args = (
-            *(_translate(item, open_records=open_records) for item in schema[:-1]),
-            Ellipsis,
-        )
+        repeated = fixed if len(schema) > 1 else (_validator(_anything),)
+        # vtjson indexes the last element here, and `(..., ...)` has none.
+        args = (*repeated[:-1], repeated[-1], Ellipsis)
         return _of_own_class(schema, _validator(tuple[args]))  # ty: ignore[invalid-type-form]
     # valgebra reads a fixed-length tuple as the subscription `tuple[A, B]`, not a
     # tuple literal, so build the generic alias from the translated elements.
-    fixed = tuple(_translate(item, open_records=open_records) for item in schema)
     if open_records:
         # As for a list: the positions the tuple does not declare are free.
         free = (*fixed, _validator(_anything), Ellipsis)
@@ -1025,7 +1100,10 @@ def _translate_dict(
     for index, entry in enumerate(entries):
         if not entry.is_field:
             pattern, clause = catch_alls[index]
-            translated[pattern] = clause
+            # vtjson holds each clause apart and admits a key any of them admits,
+            # and two keys may build one validator, which a dict would collapse.
+            earlier = translated.get(pattern)
+            translated[pattern] = clause if earlier is None else _union(earlier, clause)
             continue
         # vtjson admits a key when *any* clause claiming it admits the value, so
         # a field its own catch-alls also claim has more than one way to pass.
@@ -1139,6 +1217,12 @@ class optional_key(Generic[_K]):  # noqa: N801  (vtjson's name)
 
     __slots__ = ("key", "optional")
 
+    # Declared as vtjson's are: before 3.12 a generic class carries `_is_protocol`,
+    # and vtjson reads one written bare as a schema by these hints.
+    key: _K
+    optional: bool
+    __name__: str
+
     def __init__(self, key: _K, _optional: bool = True) -> None:  # noqa: FBT001, FBT002
         self.key = key
         self.optional = _optional
@@ -1245,16 +1329,20 @@ def _unclaimed_key(
 def _is_key_schema(key: object) -> bool:
     """Whether a non-string dict key constrains other keys rather than being one.
 
-    vtjson reads a key that is a *schema* — a type, a construct, a container
-    form — as a clause over the keys it matches, and a key that is a *constant*
-    as a key the value must carry. `{int: str}` says nothing about a mapping
-    with no int key; `{1: str}` says the mapping has a `1`.
+    vtjson compiles a key and reads it as a key the value must carry only where
+    that gives a constant, so `{1: str}` says the mapping has a `1`, and anything
+    with a rule of its own is a clause over the keys it matches: `{int: str}`
+    says nothing about a mapping with no int key, and neither does `{int | None:
+    str}` or `{b"a": str}`, since bytes are a sequence and only text is exempt.
     """
+    if isinstance(key, Sequence):
+        return not isinstance(key, str)
     return (
-        isinstance(key, type | CompiledValidator | _Deferred | tuple | frozenset)
+        isinstance(key, type | CompiledValidator | _Deferred | AbstractSet | Mapping)
         or callable(key)
         or hasattr(key, "__validate__")
         or (_TYPE_ALIAS is not None and isinstance(key, _TYPE_ALIAS))
+        or get_origin(key) in (Union, UnionType)
     )
 
 

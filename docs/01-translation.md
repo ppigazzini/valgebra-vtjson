@@ -43,6 +43,16 @@ a schema, under the base's strictness, and the value meets every one.
 calling one builds a container from the value rather than judging it:
 `list[int]("a")` is `["a"]`, which a predicate reads as a pass.
 
+**A bare construct is read as vtjson reads its class.** vtjson's constructs are
+classes and the layer's are functions, and a function reaches the callable rule
+below, which would call it on the value and read the validator it answers as a
+pass. vtjson instantiates a bare class deriving from `compiled_schema` when it
+compiles one, so a construct whose arguments are all optional is that call, and
+one that needs arguments is a `SchemaError`. Any other bare class is an instance
+check, which no value here passes, so `union` written bare admits nothing.
+`_nullary`, `_needs_arguments` and `_wrapper_class` tag each factory with which
+of the three it is.
+
 **A bare callable is a predicate over any value**, which is vtjson's convention.
 vtjson binds one argument to its signature when it compiles the schema and
 refuses the schema with `SchemaError` where that fails -- a callable needing two
@@ -139,6 +149,10 @@ valgebra, which reads a dataclass's or a `NamedTuple`'s fields, and refuses one 
 type parameter names. A container literal written in a foreign class demands its
 class the same way.
 
+A tuple's arguments are the elements of a tuple written out, as vtjson reads
+them: `tuple[int, str]` is `(int, str)`, a `...` anywhere but last is dropped, and
+laxness frees the positions after the declared ones.
+
 An origin naming neither kind, and neither a union nor a `Literal`, is one vtjson
 has no rule for. It falls through to what vtjson does with any other schema, a
 call if the form is callable and equality otherwise, and `_unplaced` is that
@@ -162,7 +176,24 @@ more would replace the call without a test turning red:
 `Generic` itself reports an origin, and vtjson reads it by the class arm, as an
 instance check.
 
+## A dict key is a constant only if it compiles to one
+
+vtjson compiles each key and reads it as a key the value must carry only where
+that gives a constant. Anything with a rule of its own is a clause over the keys
+it matches: a class, a construct, a typing form, a union in either spelling, a
+callable, and a container, bytes among them since only text is exempt from being
+a sequence. `_is_key_schema` asks that. So `{int | None: str}` says nothing about
+a mapping with no such key, where `{1: str}` says the mapping has a `1`.
+
+Each clause stands alone. Two keys may build one validator, `{int: str, union(int):
+bytes}`, and a key either of them admits belongs, so the clauses are joined rather
+than the later replacing the earlier.
+
 ## Strictness travels with the translation
+
+`compile` leaves the mode open, since vtjson takes `strict` when a compiled schema
+validates. `_compiled` builds both modes once, and returns the validator itself
+where they are one set, so a schema laxness cannot reach pays nothing for it.
 
 vtjson threads strictness as a call-time flag, so it reaches every record the
 schema names wherever that record is written. This layer settles it while

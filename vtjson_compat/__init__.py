@@ -88,7 +88,7 @@ from ._formats import (
     time,
     url,
 )
-from ._translate import SchemaError, _translate, optional_key
+from ._translate import SchemaError, _compiled, _nullary, _translate, optional_key
 from ._valgebra_api import CompiledValidator, ValidationError
 from ._valgebra_api import (
     anything as _anything,
@@ -97,9 +97,18 @@ from ._valgebra_api import (
     nothing as _nothing,
 )
 
-# The lattice top and bottom, re-exported under the vtjson names.
-anything = _anything
-nothing = _nothing
+
+@_nullary
+def anything() -> CompiledValidator:
+    """Admit every value, written bare or called, as vtjson's class is."""
+    return _anything
+
+
+@_nullary
+def nothing() -> CompiledValidator:
+    """Admit no value, written bare or called, as vtjson's class is."""
+    return _nothing
+
 
 __all__ = [
     "SchemaError",
@@ -157,9 +166,10 @@ def compile(schema: object) -> CompiledValidator:  # noqa: A001  (vtjson's name)
     """Compile a vtjson-style ``schema`` once into a reusable validator.
 
     Mirrors vtjson's ``compile``: build the validator once and reuse it across
-    many values, rather than recompiling on every ``validate`` call.
+    many values, rather than recompiling on every ``validate`` call. The result
+    takes ``strict`` when it validates, as vtjson's does.
     """
-    return _translate(schema)
+    return _compiled(schema)
 
 
 def validate(

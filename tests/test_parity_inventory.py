@@ -7,7 +7,7 @@ Every name on vtjson's public surface is classified exactly once as:
   recorded in ``docs/03-conformance.md`` with a reason;
 - **infrastructure** — not a vtjson schema construct at all: a re-exported stdlib
   module, a typing special form or generic alias, a feature flag, a ``TypeVar``,
-  or an internal base class / error type.
+  or a protocol vtjson annotates with.
 
 The union of the three sets must equal vtjson's public surface *exactly*, so a
 future vtjson release that adds or removes a name fails this test until a human
@@ -81,7 +81,7 @@ _SUPPORTED = frozenset(
 
 # Genuine vtjson schema constructs deliberately not supported. Each name must
 # appear in the differences ledger (asserted below).
-_LEDGERED = frozenset({"Apply", "skip_first"})
+_LEDGERED = frozenset({"Apply", "compiled_schema", "skip_first", "wrapper"})
 
 # Not vtjson schema constructs: re-exported stdlib, typing special forms and
 # generic aliases, feature-detection flags, TypeVars, and internal base classes
@@ -150,10 +150,8 @@ _INFRASTRUCTURE = frozenset(
         "supports_TypedDict",
         "supports_UnionType",
         "supports_structural",
-        # Internal base classes.
+        # What vtjson annotates its bounds with.
         "comparable",
-        "compiled_schema",
-        "wrapper",
     }
 )
 

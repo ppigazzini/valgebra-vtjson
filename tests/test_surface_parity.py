@@ -23,11 +23,9 @@ import vtjson_compat as vg
 
 # Names whose call shape differs for a stated reason.
 #
-# `anything` and `nothing` are classes in vtjson and validator constants here.
-# Both are written without parentheses wherever they appear as a schema, so no
-# call can distinguish them. The error types are exception classes, whose
-# signature is Python's rather than either library's.
-EXEMPT = frozenset({"anything", "nothing", "ValidationError", "SchemaError"})
+# The error types are exception classes, whose signature is Python's rather than
+# either library's.
+EXEMPT = frozenset({"ValidationError", "SchemaError"})
 
 
 # A variadic parameter has no name a caller can use, so its spelling cannot
