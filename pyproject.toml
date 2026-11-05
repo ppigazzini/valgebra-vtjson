@@ -37,24 +37,24 @@ packages = ["vtjson_compat"]
 
 [dependency-groups]
 dev = [
-    "annotated-types>=0.8",
-    "hypothesis>=6.168.5",
-    "pytest>=9.1.1",
+    "annotated-types>=0.8.0",
+    "hypothesis>=6.170.14",
+    "pytest>=9.2.0",
     "pytest-cov>=7.1.0",
-    "ruff>=0.17.2",
-    "ty>=0.0.91",
+    "ruff>=0.17.3",
+    "ty>=0.0.97",
     # Pinned, not floored: the differential suite is a claim about one
     # oracle version, and a floor makes that claim unreproducible.
     "vtjson==2.3.0",
     "email-validator>=2.3.0",
     "idna>=3.20",
-    "dnspython>=2.8.0",
+    "dnspython>=2.9.2",
     "python-magic>=0.4.27",
 ]
 # Benchmark-only tooling: the wall-clock harness. vtjson is already a dev
 # dependency (the parity oracle), so the comparison needs nothing more.
 bench = [
-    "pytest-benchmark>=5.3.0",
+    "pytest-benchmark>=5.3.1",
 ]
 
 [tool.pytest.ini_options]
