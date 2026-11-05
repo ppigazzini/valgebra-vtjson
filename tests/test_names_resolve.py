@@ -15,15 +15,11 @@ from __future__ import annotations
 
 import re
 import sys
+import tomllib
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
-
-if sys.version_info >= (3, 11):
-    import tomllib
-else:  # pragma: no cover - only on the oldest supported interpreter
-    import tomli as tomllib
 import valgebra
 
 import vtjson_compat as vg

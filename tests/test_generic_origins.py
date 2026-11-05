@@ -91,9 +91,7 @@ ROWS: list[tuple[str, object]] = [
     ("deque[int]", deque[int]),
     ("UserList[int]", UserList[int]),
     # An origin that is neither is left to the rule vtjson applies to anything
-    # else it cannot place: an instance check if the form answers to `type`, a
-    # call otherwise. Which of the two `type[int]` gets depends on the
-    # interpreter, so its verdict flips between 3.10 and 3.11 in vtjson too.
+    # else it cannot place: a call, and `type[int]`'s answers a class.
     ("Iterable[int]", abc.Iterable[int]),
     ("type[int]", type[int]),
 ]

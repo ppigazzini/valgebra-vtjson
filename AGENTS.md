@@ -61,7 +61,7 @@ uv run ty check
 Run the parity suite on the oldest supported interpreter as well:
 
 ```bash
-uv sync --locked --python 3.10 && uv run --no-sync pytest
+uv sync --locked --python 3.11 && uv run --no-sync pytest
 uv sync --locked --python 3.14 && uv run --no-sync pytest
 ```
 

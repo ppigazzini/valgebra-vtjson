@@ -8,6 +8,10 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Python 3.11 or later, the floor valgebra sets. Every interpreter from 3.11 to
+  3.14 and the free-threaded 3.14t runs the differential suite, and every test
+  reaches the outcome it reached under the 3.10 floor.
+
 - valgebra 0.0.20 or later. Its relations decide `subset` questions the layer
   does not ask, and building a validator runs none of them; it reads a marker
   class answering through a `__getattribute__` of its own, and the layer

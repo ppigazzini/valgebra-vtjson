@@ -126,10 +126,8 @@ the wrong number of arguments, on a builtin origin as on any other, is a
 origin that names neither kind falls back on vtjson's own rule for a schema it
 cannot place, which reads the form as an instance check if it answers to `type`,
 calls it if it is callable, and compares it otherwise: `P.args` admits the
-`args` of that `P` and nothing else. `type[int]` is the form where that distinction is
-visible: before 3.11 a subscripted generic answers `isinstance(..., type)`, so
-it admits nothing, and from 3.11 it is called instead and admits everything.
-Both libraries flip together.
+`args` of that `P` and nothing else. `type[int]` is called, and `type(value)`
+answers a class, so it admits everything.
 
 A class written as a schema is read by what kind of class it is. A `TypedDict`,
 a `Protocol` and a `NamedTuple` are **structural**: the type hints the class

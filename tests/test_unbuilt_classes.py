@@ -72,8 +72,8 @@ _FIELDS: list[tuple[str, object]] = [
 ]
 
 CLASSES = [
-    # A union object is its instance: `int | str` from 3.10, and `Union[int,
-    # str]` as well from 3.14. Before 3.14 `typing.Union` is a special form
+    # A union object is its instance: `int | str`, and `Union[int, str]` as
+    # well from 3.14. Before 3.14 `typing.Union` is a special form
     # rather than a class, read as a callable by both libraries.
     _Class("typing.Union", typing.Union, lambda: int | str),
     *(

@@ -15,12 +15,7 @@ from __future__ import annotations
 import ast
 import re
 import subprocess
-import sys
-
-if sys.version_info >= (3, 11):
-    import tomllib
-else:  # pragma: no cover - only on the oldest supported interpreter
-    import tomli as tomllib
+import tomllib
 from pathlib import Path
 
 import pytest

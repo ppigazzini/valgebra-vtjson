@@ -196,19 +196,11 @@ _BODIES: list[object] = [[], [1], [1.5], ["x"], 1, "x", {}, {"a": 1}]
 
 
 def _outcome(module: Any, schema: object, obj: object) -> str:
-    """Return ``module``'s verdict on ``obj``, or the class of what it raised.
-
-    Before 3.11 `inspect.signature` cannot read a subscripted
-    `typing_extensions` alias and raises `ValueError`, and vtjson asks it when
-    the schema is compiled. The layer asks the same question, so agreeing is
-    raising the same class there.
-    """
+    """Return ``module``'s verdict on ``obj``."""
     try:
         module.validate(schema, obj)
     except module.ValidationError:
         return "reject"
-    except Exception as exc:  # noqa: BLE001  (the refusal is the answer being compared)
-        return type(exc).__name__
     return "accept"
 
 

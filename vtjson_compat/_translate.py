@@ -217,11 +217,10 @@ def _structural(
     return _predicate(lambda obj: _attributes_match(inner, obj))
 
 
-# vtjson reads the presence qualifiers from `typing` alone, which defines them
-# from 3.11; on an older release one from `typing_extensions` is a hint like
-# any other.
-_REQUIRED = getattr(typing, "Required", None)
-_NOT_REQUIRED = getattr(typing, "NotRequired", None)
+# vtjson reads the presence qualifiers from `typing` alone; one
+# `typing_extensions` defines for itself is a hint like any other.
+_REQUIRED = typing.Required
+_NOT_REQUIRED = typing.NotRequired
 
 
 def _declared_fields(schema: object) -> list[tuple[str, bool, object]]:
@@ -248,7 +247,7 @@ def _declared_fields(schema: object) -> list[tuple[str, bool, object]]:
     declared: list[tuple[str, bool, object]] = []
     for name, hint in get_type_hints(schema, include_extras=True).items():
         origin = get_origin(hint)
-        qualified = origin is not None and origin in (_REQUIRED, _NOT_REQUIRED)
+        qualified = origin in (_REQUIRED, _NOT_REQUIRED)
         if total:
             optional = qualified and origin is _NOT_REQUIRED
         else:
@@ -469,7 +468,7 @@ def _translate_container(
                 )
             # The retry is the mechanism, not a loop with a cost: an acyclic
             # schema never raises, and a cyclic one raises once per cycle.
-            except _CycleError as cycle:  # noqa: PERF203
+            except _CycleError as cycle:
                 if cycle.target in state.targets:
                     raise  # already a fixpoint, so this is not one it can close
                 state.targets |= {cycle.target}
@@ -618,8 +617,8 @@ def _named_outright(
     if schema is None:
         return _validator(None)
     if schema is Any:
-        # vtjson names `Any` outright and admits everything. Before 3.11 it is
-        # not a class, so the class arm does not catch it.
+        # vtjson names `Any` outright and admits everything, ahead of the class
+        # arm, whose instance check would raise.
         return _validator(_anything)
     if hasattr(schema, "__name__") and hasattr(schema, "__supertype__"):
         attribute = "__supertype__"
@@ -878,9 +877,8 @@ def _translated_alias(
         for item in get_args(schema)
     )
     if origin in (Union, UnionType):
-        # Built as a union of the translated arguments rather than by
-        # subscripting `Union`, which before 3.11 admits only types and a
-        # translated argument is a validator.
+        # Built as a union of the translated arguments: a translated argument
+        # is a validator, and `Union` of one is a form for valgebra to read.
         return _union(*arguments)
     # A subscriptable origin, since `_PARAMETERISED` lists only those.
     return origin[arguments]  # ty: ignore[not-subscriptable]

@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "valgebra-vtjson"
 version = "0.0.1"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 description = "vtjson interoperability layer for valgebra: read vtjson-style schemas and validate them through valgebra, proven by a differential suite."
 readme = "README.md"
 license = "MIT OR Apache-2.0"
@@ -16,7 +16,6 @@ classifiers = [
     "Intended Audience :: Developers",
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -42,7 +41,6 @@ dev = [
     "hypothesis>=6.168.5",
     "pytest>=9.1.1",
     "pytest-cov>=7.1.0",
-    "tomli>=2.5.0; python_version < '3.11'",
     "ruff>=0.17.2",
     "ty>=0.0.91",
     # Pinned, not floored: the differential suite is a claim about one
@@ -66,7 +64,7 @@ addopts = ["-ra", "--strict-markers", "--strict-config"]
 xfail_strict = true
 
 [tool.ruff]
-target-version = "py310"
+target-version = "py311"
 src = ["vtjson_compat", "tests"]
 
 [tool.ruff.lint]

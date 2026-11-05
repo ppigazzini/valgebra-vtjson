@@ -23,7 +23,6 @@ it qualifies.
 
 from __future__ import annotations
 
-import sys
 import typing
 from typing import (
     TYPE_CHECKING,
@@ -34,6 +33,7 @@ from typing import (
     ParamSpec,
     Protocol,
     TypeVar,
+    TypeVarTuple,
 )
 
 import pytest
@@ -41,11 +41,6 @@ import typing_extensions
 import vtjson as vt
 
 import vtjson_compat as vg
-
-if sys.version_info >= (3, 11):
-    from typing import TypeVarTuple
-else:
-    from typing_extensions import TypeVarTuple
 
 if TYPE_CHECKING:
     from collections.abc import Callable
