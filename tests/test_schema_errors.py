@@ -41,6 +41,7 @@ MALFORMED: list[tuple[str, Any]] = [
     ("interval(1, 'a')", lambda m: m.interval(1, "a")),
     ("size(-1)", lambda m: m.size(-1)),
     ("size(5, 1)", lambda m: m.size(5, 1)),
+    ("size(2**70, 2**65)", lambda m: m.size(2**70, 2**65)),
     ("size(2.5)", lambda m: m.size(2.5)),
     ("div(0)", lambda m: m.div(0)),
     ("div('x')", lambda m: m.div("x")),

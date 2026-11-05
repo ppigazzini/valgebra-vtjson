@@ -225,6 +225,10 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `size` decides at an end past `sys.maxsize`, which `len` cannot answer: a lower
+  end admits nothing and an upper end bounds nothing, where valgebra's refusal of
+  such a bound raised `ValueError`.
+
 - A subscripted generic vtjson has no rule for is read by vtjson's own fallback,
   a call if the form is callable and equality otherwise, where valgebra has a
   reading of its own that replaced the call: a generic dataclass or class

@@ -12,6 +12,7 @@ testing two different schemas.
 
 from __future__ import annotations
 
+import sys
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -35,6 +36,19 @@ def _accepts(module: Any, schema: object, obj: object) -> bool:
     return True
 
 
+class _Longest:
+    """A sized value at the longest length `len` can answer."""
+
+    def __len__(self) -> int:
+        return sys.maxsize
+
+
+_MAX = sys.maxsize
+# A value of each length a bound around `sys.maxsize` can tell apart, one with
+# no length at all, and an empty one.
+_SIZED: list[object] = ["", "a", [1], {}, 1, None, _Longest()]
+
+
 # Each row: a label, a builder taking the module and returning the schema, and
 # the objects to probe. The builder runs once per library, so the two schemas
 # are the same construct with the same arguments in each library's own spelling.
@@ -47,6 +61,21 @@ ARGUMENT_SPACE: list[tuple[str, Callable[[Any], object], list[object]]] = [
     # `size` takes the same sentinel, and is the construct that reads it today.
     ("size(2, ...)", lambda m: m.size(2, ...), ["a", "ab", "abcdef"]),
     ("size(3)", lambda m: m.size(3), ["ab", "abc", "abcd"]),
+    # A length past `sys.maxsize` is one `len` cannot answer. Each end is
+    # compared as any other, so a lower one admits nothing and an upper one
+    # bounds nothing, whatever the valgebra node takes.
+    ("size(MAX)", lambda m: m.size(_MAX), _SIZED),
+    ("size(MAX + 1)", lambda m: m.size(_MAX + 1), _SIZED),
+    ("size(2**64)", lambda m: m.size(2**64), _SIZED),
+    ("size(2**70)", lambda m: m.size(2**70), _SIZED),
+    ("size(MAX + 1, ...)", lambda m: m.size(_MAX + 1, ...), _SIZED),
+    ("size(2**70, ...)", lambda m: m.size(2**70, ...), _SIZED),
+    ("size(0, MAX)", lambda m: m.size(0, _MAX), _SIZED),
+    ("size(0, MAX + 1)", lambda m: m.size(0, _MAX + 1), _SIZED),
+    ("size(0, 2**64)", lambda m: m.size(0, 2**64), _SIZED),
+    ("size(1, 2**70)", lambda m: m.size(1, 2**70), _SIZED),
+    ("size(MAX, MAX + 1)", lambda m: m.size(_MAX, _MAX + 1), _SIZED),
+    ("size(MAX + 1, MAX + 2)", lambda m: m.size(_MAX + 1, _MAX + 2), _SIZED),
     # The dict-key modifiers, over arities and over values `in` cannot apply to.
     ("keys('a')", lambda m: m.keys("a"), [{"a": 1}, {}, 5, "x", None, ["a"]]),
     ("keys()", lambda m: m.keys(), [{}, {"a": 1}, 5, None]),

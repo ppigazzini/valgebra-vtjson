@@ -8,6 +8,7 @@ cannot handle, mirroring vtjson's reject.
 """
 
 import math
+import sys
 from collections.abc import Callable, Mapping
 from types import EllipsisType
 
@@ -30,6 +31,7 @@ from ._translate import (
 from ._valgebra_api import (
     CompiledValidator,
     anything,
+    nothing,
     refined,
 )
 from ._valgebra_api import (
@@ -106,14 +108,21 @@ def size(lb: int, ub: int | EllipsisType | None = None) -> CompiledValidator:
     if low < 0:
         msg = f"the lower size bound {low} is smaller than 0"
         raise SchemaError(msg)
-    bounds: dict[str, object] = {"min_length": low}
+    high: int | None = None
     if ub is None:
-        bounds["max_length"] = low
+        high = low
     elif ub is not Ellipsis:
         high = _integer(ub, "upper size bound")
         if high < low:
             msg = f"the lower size bound {low} is bigger than the upper bound {high}"
             raise SchemaError(msg)
+    # `len` answers at most `sys.maxsize`, and valgebra refuses a bound past it
+    # as one no value has. vtjson compares the length with each end all the
+    # same, so a lower end past it admits nothing and an upper one bounds nothing.
+    if low > sys.maxsize:
+        return nothing
+    bounds: dict[str, object] = {"min_length": low}
+    if high is not None and high <= sys.maxsize:
         bounds["max_length"] = high
     return refined(**bounds)
 
