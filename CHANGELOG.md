@@ -12,6 +12,19 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   3.14 and the free-threaded 3.14t runs the differential suite, and every test
   reaches the outcome it reached under the 3.10 floor.
 
+- valgebra 0.0.23 or later. Most of what 0.0.21 through 0.0.23 change decides
+  `subset` questions the layer does not ask, and building a validator runs none of
+  them. What reaches the layer is a reading of a generic class applied, a refusal
+  of bare `Generic` and of a length bound past `sys.maxsize`, and each is closed
+  above. Every test reaches the outcome it reached on 0.0.20: 21,212 tests on 3.14
+  and on the free-threaded 3.14t, 21,211 on 3.13, 21,177 on 3.12 and 21,087 on the
+  3.11 floor, against the pinned oracle.
+
+    `docs/06-performance.md` is measured on it, with 0.0.20 interleaved in the same
+    session: the heterogeneous mapping reads 3% slower and the scalar 0.7 ns slower,
+    runs that do not overlap, and every other family lands within the spread of its
+    runs.
+
 - valgebra 0.0.20 or later. Its relations decide `subset` questions the layer
   does not ask, and building a validator runs none of them; it reads a marker
   class answering through a `__getattribute__` of its own, and the layer
