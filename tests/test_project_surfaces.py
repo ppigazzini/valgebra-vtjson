@@ -315,11 +315,15 @@ def test_every_page_is_numbered() -> None:
 def test_the_lane_runs_a_free_threaded_build() -> None:
     """The interpreter's build is a dimension, not just its version.
 
-    A free-threaded interpreter is a supported way to run 3.13 and 3.14, and the
+    A free-threaded interpreter is a supported way to run 3.14 and 3.15, and the
     translator keeps per-thread state while a schema is being descended. Running
     only GIL builds leaves that state exercised by nothing but the GIL.
     """
     assert "3.14t" in _CI, (
+        "no lane runs a free-threaded interpreter, so the descent state is "
+        "never exercised without the GIL holding it still"
+    )
+    assert "3.15t" in _CI, (
         "no lane runs a free-threaded interpreter, so the descent state is "
         "never exercised without the GIL holding it still"
     )

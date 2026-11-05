@@ -8,9 +8,9 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- Python 3.11 or later, the floor valgebra sets. Every interpreter from 3.11 to
-  3.14 and the free-threaded 3.14t runs the differential suite, and every test
-  reaches the outcome it reached under the 3.10 floor.
+- Python 3.11 or later, the floor valgebra sets, through 3.15. Every interpreter
+  from 3.11 to 3.15 and the free-threaded 3.14t and 3.15t run the differential
+  suite, and every test reaches the outcome it reached under the 3.10 floor.
 
 - valgebra 0.0.23 or later. Most of what 0.0.21 through 0.0.23 change decides
   `subset` questions the layer does not ask, and building a validator runs none of

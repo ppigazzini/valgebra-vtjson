@@ -46,7 +46,7 @@ change that classifies a schema.**
 
 ```bash
 uv sync --locked --python 3.11 && uv run --no-sync pytest
-uv sync --locked --python 3.14 && uv run --no-sync pytest
+uv sync --locked --python 3.15 && uv run --no-sync pytest
 ```
 
 Check the two owners named at the top rather than trusting that pair to still be
@@ -54,13 +54,13 @@ the ends.
 
 ## The build is part of the interpreter
 
-A version is not an interpreter. 3.13 and 3.14 each ship a free-threaded build
-as well as a standard one, and they are different runtimes: the translator keeps
-per-thread state while it descends a schema, and under a GIL that state is held
-still by the interpreter rather than by anything here.
+A version is not an interpreter. 3.13, 3.14 and 3.15 each ship a free-threaded
+build as well as a standard one, and they are different runtimes: the translator
+keeps per-thread state while it descends a schema, and under a GIL that state is
+held still by the interpreter rather than by anything here.
 
 `.github/workflows/ci.yml` runs a free-threaded lane for that reason. Locally,
-`--python 3.14` resolves to whichever 3.14 is installed rather than to a build
+`--python 3.15` resolves to whichever 3.15 is installed rather than to a build
 you chose, so ask before assuming:
 
 ```bash

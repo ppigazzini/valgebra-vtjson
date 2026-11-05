@@ -62,14 +62,14 @@ Run the parity suite on the oldest supported interpreter as well:
 
 ```bash
 uv sync --locked --python 3.11 && uv run --no-sync pytest
-uv sync --locked --python 3.14 && uv run --no-sync pytest
+uv sync --locked --python 3.15 && uv run --no-sync pytest
 ```
 
 Those two are the ends of the range. `requires-python` in `pyproject.toml` owns
 the floor and `.github/workflows/ci.yml` owns the interpreters CI runs between
 them; check both rather than trusting the pair above to still be the ends.
 
-The *build* counts too. `--python 3.14` resolves to whichever 3.14 is installed,
+The *build* counts too. `--python 3.15` resolves to whichever 3.15 is installed,
 so a change touching per-thread state wants a free-threaded run as well:
 
 ```bash
