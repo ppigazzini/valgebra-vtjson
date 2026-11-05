@@ -266,6 +266,17 @@ def _spelled(value: object) -> str:
     return repr(value)
 
 
+def _named(module: Any, name: str) -> Any:
+    """Return what ``module`` calls ``name``.
+
+    vtjson documents `_compile` as its own, and the package's star import leaves
+    a private name in the module underneath, so that is where a wrapper finds it.
+    """
+    if name == "_compile" and module is vt:
+        return vt.vtjson._compile  # noqa: SLF001
+    return getattr(module, name)
+
+
 def _resolved(value: object, module: Any) -> object:
     """Return ``value`` with each nested argument built for ``module``."""
     if isinstance(value, _Nested):
@@ -290,7 +301,7 @@ class _Call:
         return f"{self.name}({', '.join(parts)})"
 
     def build(self, module: Any) -> object:
-        return getattr(module, self.name)(
+        return _named(module, self.name)(
             *(_resolved(a, module) for a in self.args),
             **{k: _resolved(v, module) for k, v in self.kwargs.items()},
         )
@@ -307,6 +318,10 @@ _RECORD = {"a": int}
 # Every construct at every parameter it declares, at the arguments that select a
 # different reading and at those that denote no set of values.
 CALLS: list[_Call] = [
+    # What a wrapper's `__compile__` calls, documented though its name is private.
+    _call("_compile", int),
+    _call("_compile", {"a": int}, None),
+    _call("_compile", int, _deferred_compiles=None),
     # The constructs taking nothing.
     *(
         _call(name)
@@ -628,6 +643,9 @@ KEYS_ALIKE: list[tuple[str, Callable[[Any], object]]] = [
     ("int | str, str | int", lambda m: {int | str: int, str | int: str}),  # noqa: ARG005
     ("Any, object", lambda m: {typing.Any: int, object: str}),  # noqa: ARG005
     ("anything, object", lambda m: {m.anything: int, object: str}),
+    ("ge(0), ge(0)", lambda m: {m.ge(0): int, m.ge(0): str}),
+    ("ge(0), interval(0, ...)", lambda m: {m.ge(0): int, m.interval(0, ...): str}),
+    ("size(1), size(1, 1)", lambda m: {m.size(1): int, m.size(1, 1): str}),
     ("lax(int), int", lambda m: {m.lax(int): int, int: str}),
     ("strict(int), int", lambda m: {m.strict(int): int, int: str}),
     (
@@ -905,7 +923,35 @@ def _made(**kwargs: object) -> Callable[[Any, object], object]:
     return lambda m, s: m.make_type(s, **kwargs)
 
 
+def _passes(answer: object) -> None:
+    """Read a `__validate__` answer as `validate` does: empty is a pass."""
+    if answer != "":
+        raise _NotInstanceError
+
+
 ENTRIES: list[_Entry] = [
+    _entry(
+        "compile(schema).__validate__(obj)",
+        _compiled,
+        lambda m, s, o: _passes(s.__validate__(o)),  # noqa: ARG005
+    ),
+    _entry(
+        "compile(schema).__validate__(obj, name, strict, subs)",
+        _compiled,
+        lambda m, s, o: _passes(s.__validate__(o, "named", True, {})),  # noqa: ARG005
+    ),
+    _entry(
+        "compile(schema).__validate__(obj, strict=False)",
+        _compiled,
+        lambda m, s, o: _passes(  # noqa: ARG005
+            s.__validate__(o, name="named", strict=False, subs={})
+        ),
+    ),
+    _entry(
+        "isinstance(obj, make_type(compile(schema)))",
+        lambda m, s: m.make_type(m.compile(s)),
+        _instance_of_type,
+    ),
     _entry(
         "validate(schema, obj)",
         _as_given,
@@ -1082,7 +1128,8 @@ def _junk_for(parameter: inspect.Parameter) -> list[object]:
 def _junk_calls() -> list[_Call]:
     """Return each construct with one parameter at each junk value."""
     calls = []
-    for name in sorted({call.name for call in CALLS} | {"optional_key"}):
+    # `_compile`'s table is opaque by its documentation: passed on, never chosen.
+    for name in sorted({call.name for call in CALLS} - {"_compile"} | {"optional_key"}):
         parameters = inspect.signature(getattr(vt, name)).parameters.values()
         valid = _VALID.get(name, ())
         named = [p for p in parameters if p.kind is p.POSITIONAL_OR_KEYWORD]
@@ -1209,7 +1256,8 @@ def test_a_nullary_construct_reads_alike_bare_and_called(name: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "name", sorted({c.name for c in CALLS} - set(NULLARY) | {"optional_key"})
+    "name",
+    sorted({c.name for c in CALLS} - set(NULLARY) - {"_compile"} | {"optional_key"}),
 )
 def test_a_construct_needing_arguments_is_read_alike_bare(name: str) -> None:
     """A construct written without the arguments it needs, as a schema."""
@@ -1227,6 +1275,314 @@ def test_an_optional_key_decides_as_the_oracle_does(
     """A key marked optional, however it is marked."""
     del call
     assert not (lines := _divergences(build, VALUES)), _report(lines)
+
+
+# A schema refused where it stands is refused wherever it sits, and the first
+# rows already compare that, so a position asks only what builds.
+def _builds(call: _Call) -> bool:
+    try:
+        vt.compile(call.build(vt))
+    except Exception:  # noqa: BLE001  (any refusal is not building)
+        return False
+    return True
+
+
+_BUILDING = [call for call in CALLS if _builds(call)]
+
+
+def _even_class(m: Any) -> Any:
+    class Even(m.compiled_schema):
+        def __validate__(
+            self, obj: object, name: str, strict: object, subs: object
+        ) -> str:
+            del strict, subs
+            if type(obj) is int and obj % 2 == 0:
+                return ""
+            return f"{name} is not even"
+
+    return Even
+
+
+def _mode_class(m: Any) -> Any:
+    class Mode(m.compiled_schema):
+        def __validate__(
+            self, obj: object, name: str, strict: object, subs: object
+        ) -> str:
+            del obj, subs
+            return "" if strict else f"{name} is read laxly"
+
+    return Mode
+
+
+def _delegating_hook(m: Any, inner: Any) -> Any:
+    class Delegating(m.compiled_schema):
+        def __validate__(
+            self, obj: object, name: str, strict: object, subs: object
+        ) -> str:
+            return inner.__validate__(obj, name=name, strict=strict, subs=subs)
+
+    return Delegating()
+
+
+def _needing_an_argument(m: Any) -> Any:
+    class Needing(m.compiled_schema):
+        def __init__(self, bound: int) -> None:
+            self.bound = bound
+
+    return Needing
+
+
+def _raising_in_its_constructor(m: Any) -> Any:
+    class Raising(m.compiled_schema):
+        def __init__(self) -> None:
+            raise ValueError
+
+    return Raising
+
+
+def _delegating_wrapper(m: Any, schema: object) -> Any:
+    class Delegating(m.wrapper):
+        def __compile__(self, _deferred_compiles: object = None) -> object:
+            return _named(m, "_compile")(schema, _deferred_compiles=_deferred_compiles)
+
+    return Delegating()
+
+
+def _producing_wrapper(m: Any, produce: Callable[[Any], object]) -> Any:
+    class Producing(m.wrapper):
+        def __compile__(self, _deferred_compiles: object = None) -> object:
+            return produce(m)
+
+    return Producing()
+
+
+def _refusing_wrapper(m: Any) -> Any:
+    class Refusing(m.wrapper):
+        def __compile__(self, _deferred_compiles: object = None) -> object:
+            raise m.SchemaError("refused")
+
+    return Refusing()
+
+
+def _both_bases(m: Any) -> Any:
+    class Both(m.compiled_schema, m.wrapper):
+        def __validate__(
+            self, obj: object, name: str, strict: object, subs: object
+        ) -> str:
+            del strict, subs
+            return "" if obj == 1 else f"{name} is not one"
+
+        def __compile__(self, _deferred_compiles: object = None) -> object:
+            return m.nothing()
+
+    return Both()
+
+
+# Every way a caller's own class can be a schema, by the bases vtjson documents.
+EXTENSIONS: list[tuple[str, Callable[[Any], object]]] = [
+    ("the base's instance", lambda m: m.compiled_schema()),
+    ("the base bare", lambda m: m.compiled_schema),
+    ("an instance", lambda m: _even_class(m)()),
+    ("a subclass bare", _even_class),
+    ("a subclass adding nothing", lambda m: type("Plain", (m.compiled_schema,), {})),
+    ("a subclass needing an argument, bare", _needing_an_argument),
+    ("a subclass raising in its constructor, bare", _raising_in_its_constructor),
+    ("told the mode, an instance", lambda m: _mode_class(m)()),
+    ("told the mode, bare", _mode_class),
+    ("a hook over compile", lambda m: _delegating_hook(m, m.compile({"a": int}))),
+    ("a hook over a compiled scalar", lambda m: _delegating_hook(m, m.compile(int))),
+    ("a hook over _compile", lambda m: _delegating_hook(m, _named(m, "_compile")(str))),
+    ("a hook over a construct", lambda m: _delegating_hook(m, m.ge(0))),
+    ("a hook over a format", lambda m: _delegating_hook(m, m.regex("a+"))),
+    ("the wrapper's instance", lambda m: m.wrapper()),
+    ("the wrapper class bare", lambda m: m.wrapper),
+    ("a wrapper adding nothing", lambda m: type("Plain", (m.wrapper,), {})()),
+    ("a wrapper over a class", lambda m: _delegating_wrapper(m, int)),
+    ("a wrapper over a record", lambda m: _delegating_wrapper(m, {"a": int})),
+    ("a wrapper over a list", lambda m: _delegating_wrapper(m, [int, ...])),
+    ("a wrapper over a construct", lambda m: _delegating_wrapper(m, m.ge(0))),
+    ("a wrapper over a union", lambda m: _delegating_wrapper(m, m.union(int, str))),
+    ("a wrapper over lax", lambda m: _delegating_wrapper(m, m.lax({"a": int}))),
+    ("a wrapper over strict", lambda m: _delegating_wrapper(m, m.strict({"a": int}))),
+    (
+        "a wrapper over a wrapper",
+        lambda m: _delegating_wrapper(m, _delegating_wrapper(m, {"a": int})),
+    ),
+    ("a wrapper over a subclass", lambda m: _delegating_wrapper(m, _even_class(m))),
+    ("a wrapper producing a hook", lambda m: _producing_wrapper(m, _even_instance)),
+    ("a wrapper producing a construct", lambda m: _producing_wrapper(m, _ge_zero)),
+    ("a wrapper producing compile", lambda m: _producing_wrapper(m, _compiled_record)),
+    ("a wrapper refusing", _refusing_wrapper),
+    ("both bases", _both_bases),
+]
+
+
+def _even_instance(m: Any) -> object:
+    return _even_class(m)()
+
+
+def _ge_zero(m: Any) -> object:
+    return m.ge(0)
+
+
+def _compiled_record(m: Any) -> object:
+    return m.compile({"a": int})
+
+
+@pytest.mark.parametrize(("label", "build"), EXTENSIONS, ids=[e[0] for e in EXTENSIONS])
+def test_a_caller_s_own_class_decides_as_the_oracle_does(
+    label: str, build: Callable[[Any], object]
+) -> None:
+    """A subclass of either documented base is a schema, in the documented order."""
+    del label
+    assert not (lines := _divergences(build, VALUES)), _report(lines)
+
+
+@pytest.mark.parametrize("position", POSITIONS, ids=[p[0] for p in POSITIONS])
+@pytest.mark.parametrize(("label", "build"), EXTENSIONS, ids=[e[0] for e in EXTENSIONS])
+def test_a_caller_s_own_class_decides_alike_wherever_it_sits(
+    label: str,
+    build: Callable[[Any], object],
+    position: tuple[str, Callable[[Any, Any], object], list[object]],
+) -> None:
+    """A subclass is one set inside any schema, as it is alone."""
+    del label
+    _, place, objects = position
+    lines = _divergences(lambda m: place(m, build(m)), objects, nested=True)
+    assert not lines, _report(lines)
+
+
+@pytest.mark.parametrize("entry", ENTRIES, ids=lambda e: e.label)
+@pytest.mark.parametrize(("label", "build"), EXTENSIONS, ids=[e[0] for e in EXTENSIONS])
+def test_a_caller_s_own_class_decides_alike_however_it_is_asked(
+    label: str, build: Callable[[Any], object], entry: _Entry
+) -> None:
+    """Every entry point reaches a subclass, and tells it the mode in force."""
+    del label
+    assert not (lines := _divergences(build, VALUES, entry)), _report(lines)
+
+
+def _nested_records(depth: int, leaf: object) -> object:
+    value = leaf
+    for _ in range(depth):
+        value = {"a": value}
+    return value
+
+
+def _cycle_through(m: Any, between: Callable[[Any, object], object]) -> object:
+    schema: dict[str, object] = {}
+    schema["a"] = m.union(None, between(m, schema))
+    return schema
+
+
+_CYCLES: list[tuple[str, Callable[[Any, object], object]]] = [
+    ("a wrapper", _delegating_wrapper),
+    (
+        "a wrapper over a wrapper",
+        lambda m, s: _delegating_wrapper(m, _delegating_wrapper(m, s)),
+    ),
+    ("a wrapper under lax", lambda m, s: m.lax(_delegating_wrapper(m, s))),
+    ("a wrapper over lax", lambda m, s: _delegating_wrapper(m, m.lax(s))),
+    ("a wrapper under union", lambda m, s: m.union(_delegating_wrapper(m, s), str)),
+    ("a wrapper under a list", lambda m, s: [_delegating_wrapper(m, s), ...]),
+]
+
+
+@pytest.mark.parametrize("mode", ["strict", "lax"])
+@pytest.mark.parametrize(("label", "between"), _CYCLES, ids=[c[0] for c in _CYCLES])
+def test_a_wrapper_closes_a_cycle_as_the_oracle_s_table_does(
+    label: str, between: Callable[[Any, object], object], mode: str
+) -> None:
+    """A schema reaching itself through a caller's `__compile__` is a fixpoint.
+
+    The table vtjson hands `__compile__` is opaque by its documentation, and here
+    the translation's own per-thread state holds what it holds.
+    """
+    del label
+    objects: list[object] = [
+        None,
+        1,
+        "a",
+        {},
+        {"a": None},
+        {"a": 1},
+        {"a": "x"},
+        {"a": [None]},
+        {"a": [{"a": None}]},
+        {"a": None, "b": 1},
+    ]
+    objects += [_nested_records(depth, None) for depth in (2, 3, 8)]
+    objects += [_nested_records(depth, 1) for depth in (2, 3)]
+    entry = _entry(
+        "asked",
+        _as_given,
+        lambda m, s, o: m.validate(s, o, strict=mode == "strict"),
+    )
+    lines = _divergences(lambda m: _cycle_through(m, between), objects, entry)
+    assert not lines, _report(lines)
+
+
+def _base_of(module: Any, made: object) -> tuple[bool, bool, bool, bool]:
+    return (
+        isinstance(made, module.compiled_schema),
+        isinstance(made, module.wrapper),
+        hasattr(made, "__validate__"),
+        hasattr(made, "__compile__"),
+    )
+
+
+@pytest.mark.parametrize("call", _BUILDING, ids=lambda c: c.label)
+def test_a_construct_answers_to_the_base_the_oracle_gives_it(call: _Call) -> None:
+    """A built-in is a `compiled_schema` or a `wrapper`, and carries its method."""
+    assert _base_of(vg, call.build(vg)) == _base_of(vt, call.build(vt))
+
+
+@pytest.mark.parametrize(("label", "schema"), FORMS, ids=[f[0] for f in FORMS])
+def test_a_compiled_form_is_a_compiled_schema(label: str, schema: object) -> None:
+    """`compile` gives what its documentation says, whatever it was given."""
+    del label
+    try:
+        reference = _base_of(vt, vt.compile(schema))
+    except IndexError:
+        # `[..., ...]` indexes an element it dropped, and vtjson's compile raises.
+        with pytest.raises(IndexError):
+            vg.compile(schema)
+        return
+    assert _base_of(vg, vg.compile(schema)) == reference
+
+
+def test_the_two_bases_are_apart() -> None:
+    """Neither derives from the other, in either library."""
+    for module in (vt, vg):
+        assert not issubclass(module.wrapper, module.compiled_schema)
+        assert not issubclass(module.compiled_schema, module.wrapper)
+        assert isinstance(module.compile(int), module.compiled_schema)
+        assert not isinstance(module.compile(int), module.wrapper)
+
+
+def test_a_construct_keeps_its_identity_as_a_key() -> None:
+    """Two constructs written alike are two keys, as vtjson's two objects are."""
+    assert len(dict.fromkeys((vg.ge(0), vg.ge(0)))) == 2
+    assert len(dict.fromkeys((vt.ge(0), vt.ge(0)))) == 2
+
+
+def test_a_construct_is_a_function_as_the_ledger_records() -> None:
+    """An instance of a base, but no class to ask `isinstance` of or to derive from."""
+    assert isinstance(vt.ge(0), vt.ge)
+    assert issubclass(vt.ge, vt.compiled_schema)
+    assert issubclass(vt.union, vt.wrapper)
+    with pytest.raises(TypeError):
+        isinstance(vg.ge(0), vg.ge)  # ty: ignore[invalid-argument-type]
+    assert isinstance(vg.ge(0), vg.compiled_schema)
+    assert isinstance(vg.union(int), vg.wrapper)
+    assert "A construct's class" in _LEDGER
+
+
+def test_compile_of_a_compiled_schema_is_itself() -> None:
+    """Compiling twice is compiling once, as vtjson's first arm makes it."""
+    for module in (vt, vg):
+        compiled = module.compile({"a": int})
+        assert module.compile(compiled) is compiled
 
 
 _KEYED_VALUES: list[object] = [
@@ -1329,29 +1685,6 @@ def test_a_value_with_its_own_order_is_the_ledgered_asymmetry(
     assert "order of its own" in _LEDGER
 
 
-@pytest.mark.parametrize(
-    "keys",
-    [
-        lambda m: (m.ge(0), m.ge(0)),
-        lambda m: (m.ge(0), m.interval(0, ...)),
-        lambda m: (m.size(1), m.size(1, 1)),
-    ],
-    ids=["ge(0), ge(0)", "ge(0), interval(0, ...)", "size(1), size(1, 1)"],
-)
-def test_keys_comparing_equal_are_the_ledgered_collapse(
-    keys: Callable[[Any], tuple[object, object]],
-) -> None:
-    """The caller's own dict holds one key where it holds two under vtjson.
-
-    A valgebra validator compares by the set it denotes, and a vtjson construct
-    by its identity, so Python keeps one of two keys that denote one set before
-    either library reads the dict.
-    """
-    assert len(dict.fromkeys(keys(vt))) == 2
-    assert len(dict.fromkeys(keys(vg))) == 1
-    assert "compare equal" in _LEDGER
-
-
 @pytest.mark.parametrize(("label", "schema"), FORMS, ids=[f[0] for f in FORMS])
 def test_each_form_decides_as_the_oracle_does(label: str, schema: object) -> None:
     """A schema written without a construct, read by what it is."""
@@ -1375,19 +1708,6 @@ def _equal(left: object, right: object) -> bool:
         return bool(left == right)
     except Exception:  # noqa: BLE001  (a value that cannot answer is not equal)
         return False
-
-
-# A schema refused where it stands is refused wherever it sits, and the first
-# rows already compare that, so a position asks only what builds.
-def _builds(call: _Call) -> bool:
-    try:
-        vt.compile(call.build(vt))
-    except Exception:  # noqa: BLE001  (any refusal is not building)
-        return False
-    return True
-
-
-_BUILDING = [call for call in CALLS if _builds(call)]
 
 
 @pytest.mark.parametrize("position", POSITIONS, ids=[p[0] for p in POSITIONS])
@@ -1566,7 +1886,7 @@ def test_a_substitution_is_the_ledgered_refusal(ask: Callable[[Any], object]) ->
         ask(vg)
 
 
-@pytest.mark.parametrize("name", ["Apply", "skip_first", "compiled_schema", "wrapper"])
+@pytest.mark.parametrize("name", ["Apply", "skip_first"])
 def test_a_name_the_ledger_records_as_unsupported_is_absent(name: str) -> None:
     """An attribute that does not exist fails where it is written, not on a value."""
     assert hasattr(vt, name)
@@ -1583,7 +1903,11 @@ _OWN = frozenset(
 )
 _ENTRY_POINTS = frozenset({"validate", "compile", "make_type", "safe_cast"})
 _ERRORS = frozenset({"SchemaError", "ValidationError"})
-_LEDGERED = frozenset({"Apply", "skip_first", "compiled_schema", "wrapper"})
+_LEDGERED = frozenset({"Apply", "skip_first"})
+# The two bases a caller derives a schema from, which `EXTENSIONS` sweeps.
+_BASES = frozenset({"compiled_schema", "wrapper"})
+# Documented, though its name is private, so `_OWN` does not read it.
+_DOCUMENTED = frozenset({"_compile"})
 # What vtjson annotates its own signatures with, and no call takes.
 _ANNOTATION_ONLY = frozenset({"C", "K", "StringKeyType", "T", "comparable"})
 
@@ -1591,14 +1915,15 @@ _ANNOTATION_ONLY = frozenset({"C", "K", "StringKeyType", "T", "comparable"})
 def test_every_public_name_is_swept() -> None:
     """A name vtjson adds fails here until a row reaches it."""
     swept = {call.name for call in CALLS} | {k[0].name for k in KEYED} | set(NULLARY)
-    placed = swept | _ENTRY_POINTS | _ERRORS | _LEDGERED | _ANNOTATION_ONLY
+    placed = swept | _ENTRY_POINTS | _ERRORS | _LEDGERED | _ANNOTATION_ONLY | _BASES
     assert not (unswept := sorted(_OWN - placed)), f"no row reaches {unswept}"
-    assert not (stale := sorted(placed - _OWN)), f"vtjson has no name {stale}"
+    assert not (stale := sorted(placed - _OWN - _DOCUMENTED)), f"no name {stale}"
+    assert all(_named(vt, name) and _named(vg, name) for name in _DOCUMENTED)
 
 
 def _bound_parameters(call: _Call) -> set[tuple[str, str]]:
     """Return each parameter ``call`` passes an argument to."""
-    signature = inspect.signature(getattr(vt, call.name))
+    signature = inspect.signature(_named(vt, call.name))
     try:
         bound = signature.bind(*call.args, **call.kwargs)
     except TypeError:
@@ -1619,7 +1944,9 @@ def test_every_parameter_is_swept() -> None:
             passed.add((name, argument))
     declared = {
         (name, parameter)
-        for name in sorted(_OWN - _LEDGERED - _ERRORS - _ANNOTATION_ONLY)
-        for parameter in inspect.signature(getattr(vt, name)).parameters
+        for name in sorted(
+            (_OWN | _DOCUMENTED) - _LEDGERED - _ERRORS - _ANNOTATION_ONLY
+        )
+        for parameter in inspect.signature(_named(vt, name)).parameters
     }
     assert not (unswept := sorted(declared - passed)), f"no row passes {unswept}"

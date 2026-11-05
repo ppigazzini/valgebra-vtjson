@@ -221,6 +221,14 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `compiled_schema` and `wrapper`, the bases vtjson documents for a schema of a
+  caller's own, and `_compile`, which a `__compile__` calls. A subclass is a schema
+  as an instance and written bare, a wrapper closes a cycle through its
+  `__compile__`, and `compile` gives a `compiled_schema` whose `__validate__`
+  answers as vtjson's does. Every construct is an instance of the base vtjson gives
+  it, so two written alike are two dict keys, where they compared equal and one was
+  dropped from the caller's dict.
+
 - `tests/test_oracle_api_sweep.py`, this repository's differential sweep of
   vtjson's public API: every public name at every parameter it declares, crossed
   with where the schema sits and how the question is asked, and failing on a name

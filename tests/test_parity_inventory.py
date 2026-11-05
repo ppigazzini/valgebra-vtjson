@@ -35,6 +35,7 @@ _SUPPORTED = frozenset(
         "at_most_one_of",
         "close_to",
         "compile",
+        "compiled_schema",
         "complement",
         "cond",
         "date",
@@ -76,12 +77,13 @@ _SUPPORTED = frozenset(
         "unique",
         "url",
         "validate",
+        "wrapper",
     }
 )
 
 # Genuine vtjson schema constructs deliberately not supported. Each name must
 # appear in the differences ledger (asserted below).
-_LEDGERED = frozenset({"Apply", "compiled_schema", "skip_first", "wrapper"})
+_LEDGERED = frozenset({"Apply", "skip_first"})
 
 # Not vtjson schema constructs: re-exported stdlib, typing special forms and
 # generic aliases, feature-detection flags, TypeVars, and internal base classes

@@ -176,6 +176,34 @@ more would replace the call without a test turning red:
 `Generic` itself reports an origin, and vtjson reads it by the class arm, as an
 instance check.
 
+## A schema of a caller's own
+
+vtjson documents two bases to derive a schema from, and they are two kinds of
+thing, which the layer reads as such.
+
+**`compiled_schema` is a predicate.** Its `__validate__` answers the empty string
+for a member, so `{ v | s.__validate__(v, name, strict, subs) == "" }` is the set,
+indexed by the mode. That is the opaque atom valgebra's algebra already holds, and
+`_hooked` is what reads it, as it reads any object carrying the hook: it folds
+nothing and the relations decline it, since it is code that need not answer from
+the value alone. The base adds no set. It adds the class written bare, which vtjson
+instantiates, and a name for what `compile` gives.
+
+**`wrapper` has no set of its own.** It denotes what its `__compile__` gives, as a
+reference denotes its definition, so the translator reads through it and nothing
+of it reaches the validator. That is a term rewrite written in Python, which is how
+every construct here is written.
+
+`_compile` is what a `__compile__` calls. The table vtjson passes it is opaque by
+its documentation, and `_Recursion` holds what that table holds, so the layer takes
+it and does not read it, and a schema reaching itself through a caller's wrapper is
+the same fixpoint. A build made during a translation may hold the back edge of a
+fixpoint being closed, so `_Compiled` keeps only a build made outside one: a hook
+holding a compiled schema asks it later, when that edge would be unresolved.
+
+Every construct is an instance of the base vtjson gives it, so it hashes by its
+identity as vtjson's do, and `{ge(0): int, ge(0): str}` holds two keys.
+
 ## A dict key is a constant only if it compiles to one
 
 vtjson compiles each key and reads it as a key the value must carry only where
@@ -192,8 +220,8 @@ than the later replacing the earlier.
 ## Strictness travels with the translation
 
 `compile` leaves the mode open, since vtjson takes `strict` when a compiled schema
-validates. `_compiled` builds both modes once, and returns the validator itself
-where they are one set, so a schema laxness cannot reach pays nothing for it.
+validates. `_Compiled` builds each mode once, when it is first asked for, and
+`is_valid` reads the strict build without going through `__getattr__`.
 
 vtjson threads strictness as a call-time flag, so it reaches every record the
 schema names wherever that record is written. This layer settles it while

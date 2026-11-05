@@ -88,7 +88,15 @@ from ._formats import (
     time,
     url,
 )
-from ._translate import SchemaError, _compiled, _nullary, _translate, optional_key
+from ._translate import (
+    SchemaError,
+    _compile,
+    _nullary,
+    _translate,
+    compiled_schema,
+    optional_key,
+    wrapper,
+)
 from ._valgebra_api import CompiledValidator, ValidationError
 from ._valgebra_api import (
     anything as _anything,
@@ -118,6 +126,7 @@ __all__ = [
     "at_most_one_of",
     "close_to",
     "compile",
+    "compiled_schema",
     "complement",
     "cond",
     "date",
@@ -159,17 +168,18 @@ __all__ = [
     "unique",
     "url",
     "validate",
+    "wrapper",
 ]
 
 
-def compile(schema: object) -> CompiledValidator:  # noqa: A001  (vtjson's name)
+def compile(schema: object) -> compiled_schema:  # noqa: A001  (vtjson's name)
     """Compile a vtjson-style ``schema`` once into a reusable validator.
 
     Mirrors vtjson's ``compile``: build the validator once and reuse it across
     many values, rather than recompiling on every ``validate`` call. The result
     takes ``strict`` when it validates, as vtjson's does.
     """
-    return _compiled(schema)
+    return _compile(schema)
 
 
 def validate(

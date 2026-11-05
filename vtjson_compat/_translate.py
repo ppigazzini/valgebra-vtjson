@@ -6,6 +6,7 @@ valgebra's native frontend (lists, ``float``), and where vtjson is lax the lax
 meaning is expressed with the algebra so the accept/reject decision matches.
 """
 
+import functools
 import importlib
 import inspect
 import math
@@ -29,7 +30,7 @@ from typing import (
     is_typeddict,
 )
 
-from ._valgebra_api import CompiledValidator
+from ._valgebra_api import CompiledValidator, ValidationError
 from ._valgebra_api import (
     anything as _anything,
 )
@@ -112,7 +113,79 @@ def _number(value: object, role: str) -> int | float:
     return value
 
 
-class _Deferred:
+class compiled_schema:  # noqa: N801  (vtjson's name)
+    """The base of a schema that decides by itself, as vtjson's is.
+
+    Its `__validate__` answers the empty string for a member and an explanation
+    for anything else. Over the algebra that is an opaque predicate, and nothing
+    the base adds is a set: `_hooked` reads a subclass as it reads any object
+    carrying the hook. What the base adds is the class written bare, which vtjson
+    instantiates, and a name for what `compile` gives.
+    """
+
+    __slots__ = ()
+
+    __name__: str
+
+    def __validate__(
+        self,
+        obj: object,
+        name: str,
+        strict: bool,  # noqa: FBT001
+        subs: Mapping[str, object],
+    ) -> str:
+        """Admit every value, as vtjson's does until a subclass says otherwise."""
+        del obj, name, strict, subs
+        return ""
+
+    def is_valid(self, obj: object) -> bool:
+        """Whether ``obj`` is a member, which anything `compile` gives can answer."""
+        return _hooked(self, open_records=False).is_valid(obj)
+
+
+class wrapper:  # noqa: N801  (vtjson's name)
+    """The base of a schema written in terms of other schemas, as vtjson's is.
+
+    It denotes what its `__compile__` gives and no set of its own, as a reference
+    denotes its definition, so the translator reads through it and leaves nothing
+    of it in the validator.
+    """
+
+    __slots__ = ()
+
+    def __compile__(self, _deferred_compiles: object = None) -> object:
+        """Admit every value, as vtjson's does until a subclass says otherwise."""
+        del _deferred_compiles
+        return _compile(_anything)
+
+
+class _Waiting:
+    """A schema that takes the mode it is read under when it is translated."""
+
+    # `is_valid` is the one attribute served without `__getattr__`, since a schema
+    # compiled once is asked it on the hot path.
+    __slots__ = ("_settled", "is_valid")
+
+    _settled: CompiledValidator | None
+
+    def _under(self, *, open_records: bool) -> CompiledValidator:
+        """Return the validator this schema denotes under ``open_records``."""
+        raise NotImplementedError
+
+    def __getattr__(self, name: str) -> object:
+        # A dunder asks what the object is, which building cannot answer: a schema
+        # that does not build is still a schema with no `__validate__`.
+        if name.startswith("__"):
+            raise AttributeError(name)
+        if self._settled is None:
+            self._settled = self._under(open_records=False)
+        return getattr(self._settled, name)
+
+    def __repr__(self) -> str:
+        return repr(self._under(open_records=False))
+
+
+class _Deferred(_Waiting, wrapper):
     """A construct holding what it needs to translate, but not the mode.
 
     vtjson threads strictness as a call-time flag, so a combinator sitting
@@ -129,43 +202,90 @@ class _Deferred:
     on its own is a validator like any other.
     """
 
-    # `is_valid` is the one attribute `_compiled` serves without `__getattr__`,
-    # since a schema compiled once is asked it on the hot path.
-    __slots__ = ("_build", "_settled", "is_valid")
+    __slots__ = ("_build",)
 
     def __init__(self, build: Callable[..., CompiledValidator]) -> None:
         self._build = build
-        self._settled: CompiledValidator | None = None
+        self._settled = None
 
     def _under(self, *, open_records: bool) -> CompiledValidator:
-        """Return the validator this construct denotes under ``open_records``."""
         return self._build(open_records=open_records)
 
-    def __getattr__(self, name: str) -> object:
-        if self._settled is None:
-            self._settled = self._build(open_records=False)
-        return getattr(self._settled, name)
-
-    def __repr__(self) -> str:
-        return repr(self._under(open_records=False))
+    def __compile__(self, _deferred_compiles: object = None) -> object:
+        return _compile(self, _deferred_compiles)
 
 
-def _compiled(schema: object) -> CompiledValidator:
-    """Compile ``schema`` once, leaving open the mode it validates under.
+class _Compiled(_Waiting, compiled_schema):
+    """A schema compiled once, taking `strict` when it validates, as vtjson's does.
 
-    vtjson's `compile` refuses a schema when it is called and takes `strict` when
-    the compiled schema validates, so both modes are built here, once. Where they
-    are one set the mode decides nothing, and the validator is returned as it is.
+    A build made during a translation may hold the back edge of a fixpoint still
+    being closed, so it serves that translation and is not kept. A build made
+    outside one is complete, and is built once per mode.
     """
-    strict = _translate(schema)
-    lax = _translate(schema, open_records=True)
-    if strict == lax:
-        return strict
-    builds = {False: strict, True: lax}
-    waiting = _Deferred(lambda *, open_records: builds[open_records])
-    waiting._settled = strict  # noqa: SLF001
-    waiting.is_valid = strict.is_valid
-    return waiting  # ty: ignore[invalid-return-type]
+
+    __slots__ = ("_builds", "_schema")
+
+    def __init__(self, schema: object) -> None:
+        self._schema = schema
+        self._builds: dict[bool, CompiledValidator] = {}
+        self._settled = None
+
+    def _under(self, *, open_records: bool) -> CompiledValidator:
+        if _recursion().depth:
+            return _translate(self._schema, open_records=open_records)
+        built = self._builds.get(open_records)
+        if built is None:
+            built = _translate(self._schema, open_records=open_records)
+            self._builds[open_records] = built
+        return built
+
+    def __validate__(
+        self,
+        obj: object,
+        name: str = "object",
+        strict: bool = True,  # noqa: FBT001, FBT002
+        subs: Mapping[str, object] | None = None,
+    ) -> str:
+        """Answer as vtjson's does: empty for a member, an explanation otherwise."""
+        del name  # cosmetic, as it is for `validate`
+        if subs:
+            msg = (
+                "validate-time subs substitution is not supported; "
+                "express recursion with valgebra's recursive fixpoint"
+            )
+            raise NotImplementedError(msg)
+        try:
+            self._under(open_records=not strict).validate(obj)
+        except ValidationError as exc:
+            return str(exc)
+        return ""
+
+
+def _compile(schema: object, _deferred_compiles: object = None) -> compiled_schema:
+    """Compile ``schema``, under the name vtjson documents for a `__compile__`.
+
+    vtjson's table of deferred compiles is opaque by its own documentation, and
+    this thread's `_Recursion` holds what it holds, so it is taken and not read.
+    Outside a translation the schema is built now, since vtjson refuses a schema
+    when it compiles one. Inside one, the translation that asked refuses it. A
+    caller's `wrapper` gives what its `__compile__` gives, read in the order
+    vtjson reads them, where one of the layer's own waits for its mode.
+    """
+    del _deferred_compiles
+    if isinstance(schema, compiled_schema):
+        return schema
+    if isinstance(schema, type) and issubclass(schema, compiled_schema):
+        return _instantiated(schema)
+    if (
+        isinstance(schema, wrapper)
+        and not isinstance(schema, _Deferred)
+        and not hasattr(schema, "__validate__")
+    ):
+        return _compile(schema.__compile__(_deferred_compiles=None))
+    made = _Compiled(schema)
+    if not _recursion().depth:
+        made.is_valid = made._under(open_records=False).is_valid  # noqa: SLF001
+    return made
 
 
 def _deferred(build: Callable[..., CompiledValidator]) -> CompiledValidator:
@@ -367,6 +487,16 @@ def _equal_to(schema: object) -> CompiledValidator:
 _Factory = TypeVar("_Factory", bound=Callable[..., CompiledValidator])
 
 
+def _as_compiled(func: _Factory) -> _Factory:
+    """Give back a `compiled_schema`, as the class vtjson writes this construct as."""
+
+    @functools.wraps(func)
+    def made(*args: object, **kwargs: object) -> object:
+        return _compile(func(*args, **kwargs))
+
+    return made  # ty: ignore[invalid-return-type]
+
+
 def _nullary(func: _Factory) -> _Factory:
     """Tag a construct factory vtjson also accepts bare, without a call.
 
@@ -376,8 +506,9 @@ def _nullary(func: _Factory) -> _Factory:
     fall into the predicate branch and be called *on the value*; this tag tells
     ``_translate`` to instantiate it instead, matching vtjson.
     """
-    func.__dict__["_vtjson_nullary"] = True
-    return func
+    made = _as_compiled(func)
+    made.__dict__["_vtjson_nullary"] = True
+    return made
 
 
 def _needs_arguments(func: _Factory) -> _Factory:
@@ -387,20 +518,30 @@ def _needs_arguments(func: _Factory) -> _Factory:
     the schema where that fails. Called on the value instead, the factory would
     answer a validator, whose truth admits everything.
     """
-    func.__dict__["_vtjson_bare"] = _refused_bare
-    return func
+    made = _as_compiled(func)
+    made.__dict__["_vtjson_bare"] = _refused_bare
+    return made
 
 
 def _wrapper_class(func: _Factory) -> _Factory:
     """Tag a construct whose class vtjson reads bare as an instance check.
 
     vtjson instantiates only what derives from `compiled_schema`, and `union`
-    and its like do not, so a bare one is a class like any other. No value here
-    is an instance of a construct the layer writes as a function, so it admits
-    nothing.
+    and its like derive from `wrapper`, so a bare one is a class like any other.
+    No value here is an instance of a construct the layer writes as a function,
+    so it admits nothing. What the factory gives is a `wrapper`, and one that
+    settled its validator already waits for a mode it does not read.
     """
-    func.__dict__["_vtjson_bare"] = _admitting_nothing
-    return func
+
+    @functools.wraps(func)
+    def made(*args: object, **kwargs: object) -> object:
+        built = func(*args, **kwargs)
+        if isinstance(built, _Deferred):
+            return built
+        return _Deferred(lambda *, open_records: built)  # noqa: ARG005
+
+    made.__dict__["_vtjson_bare"] = _admitting_nothing
+    return made  # ty: ignore[invalid-return-type]
 
 
 def _refused_bare(schema: Callable[..., object]) -> CompiledValidator:
@@ -613,13 +754,27 @@ def _deciding_itself(schema: object, *, open_records: bool) -> CompiledValidator
     hook before any other reading, so a class that carries one -- a dataclass, a
     `NamedTuple` -- is read by it alone.
     """
-    if isinstance(schema, _Deferred):
+    if isinstance(schema, _Waiting):
         return schema._under(open_records=open_records)  # noqa: SLF001
     if isinstance(schema, CompiledValidator):
         return schema
+    if isinstance(schema, type) and issubclass(schema, compiled_schema):
+        return _hooked(_instantiated(schema), open_records=open_records)
     if hasattr(schema, "__validate__"):
         return _hooked(schema, open_records=open_records)
+    if isinstance(schema, wrapper):
+        made = schema.__compile__(_deferred_compiles=None)
+        return _translate(made, open_records=open_records)
     return None
+
+
+def _instantiated(schema: type[compiled_schema]) -> compiled_schema:
+    """Instantiate a bare subclass of `compiled_schema`, as vtjson does."""
+    try:
+        return schema()
+    except Exception:  # noqa: BLE001  (vtjson refuses on any raise)
+        msg = f"{schema.__name__!r} does not have a no-argument constructor"
+        raise SchemaError(msg) from None
 
 
 def _translate(
@@ -1338,7 +1493,9 @@ def _is_key_schema(key: object) -> bool:
     if isinstance(key, Sequence):
         return not isinstance(key, str)
     return (
-        isinstance(key, type | CompiledValidator | _Deferred | AbstractSet | Mapping)
+        isinstance(
+            key, type | CompiledValidator | _Waiting | wrapper | AbstractSet | Mapping
+        )
         or callable(key)
         or hasattr(key, "__validate__")
         or (_TYPE_ALIAS is not None and isinstance(key, _TYPE_ALIAS))
