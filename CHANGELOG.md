@@ -225,6 +225,18 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- A subscripted generic vtjson has no rule for is read by vtjson's own fallback,
+  a call if the form is callable and equality otherwise, where valgebra has a
+  reading of its own that replaced the call: a generic dataclass or class
+  applied, `Callable[[int], int]`, `typing.Callable`, `typing.Sized` and
+  `typing.Hashable`. Only `Literal`, of the forms with no rule of the layer's
+  own, is asked of valgebra. `Generic` is the instance check vtjson makes.
+
+- A generic's origin and the class a container literal is written in are asked
+  `isinstance` and nothing else, as vtjson asks. A generic `NamedTuple` applied
+  decides where it raised `NotImplementedError`, and a field a dataclass or a
+  `NamedTuple` declares narrows nothing.
+
 - Laxness reaches every record a schema names, wherever it is written: a
   sequence's undeclared positions, a class that declares keys, a record inside a
   subscripted generic, and the record a combinator carries. `set_label` is the

@@ -21,10 +21,6 @@ written in some other class; anything else, which is a leaf.
 
 Two of those arms exist because of a question the chain must not ask twice:
 
-- **A class arm that also excludes subscripted generics.** `isinstance(schema,
-  type)` is not enough on its own — see
-  [04-interpreters.md](04-interpreters.md). The arm asks
-  `get_origin(schema) is None` beside it.
 - **A "container in some other class" arm** after the builtins, because vtjson
   dispatches a container on its abstract kind and only then demands the value be
   the literal's own class. `_foreign_kind` answers which builtin it reads as.
@@ -137,25 +133,34 @@ gets the same treatment as a container literal written in a foreign class: the
 shape is decided by the equivalent builtin over a converted value, and the origin
 by an atom beside it. A value that will not convert is not one the origin admits.
 
-An origin naming neither kind is handed to valgebra whole, and where valgebra
-builds nothing for it the layer keeps vtjson's fallback — an instance check if
-the form answers to `type`, a call otherwise. That is one question, not an
-interpreter branch; the interpreter supplies the difference.
+The value's class is asked `isinstance` and nothing else, whatever the class
+declares of its own, so the atom is `instance_of` rather than the class handed to
+valgebra, which reads a dataclass's or a `NamedTuple`'s fields, and refuses one a
+type parameter names. A container literal written in a foreign class demands its
+class the same way.
 
-A subscripted type alias goes to that fallback without valgebra being asked.
-vtjson has no rule for one, so it calls `Pair[int]` from `type Pair[T] =
-list[T]`, and the call raises on every value: the schema admits nothing.
-valgebra reads the same form as the alias's body with the argument in place,
-`list[int]`, for `typing`'s alias class and `typing_extensions`' alike, so
-`_is_alias` asks about both.
+An origin naming neither kind, and neither a union nor a `Literal`, is one vtjson
+has no rule for. It falls through to what vtjson does with any other schema, a
+call if the form is callable and equality otherwise, and `_unplaced` is that
+fallback. valgebra is not asked first, since it has a reading of its own for many
+of these forms, the set the typing spec gives each, and a release that reads one
+more would replace the call without a test turning red:
 
-A qualifier goes there too. vtjson calls `NotRequired[int]`, `Required[int]` and
-`ReadOnly[int]` wherever one is a schema, and the call raises: the schema admits
-nothing. valgebra reads each as the type it qualifies. The only place vtjson
-reads a qualifier is the top of a structural class's hint, where
-`_declared_fields` strips a `typing.Required` or `typing.NotRequired` before the
-hint is translated; every other one, `typing`'s or `typing_extensions`',
-reaches `_is_qualifier` and the call.
+- `Box[int]` for a generic dataclass, whose call builds a `Box`, so the schema
+  admits every value. valgebra reads the class met with its fields.
+- `Pair[int]` from `type Pair[T] = list[T]`, whose call raises, so the schema
+  admits nothing. valgebra reads the alias's body, `list[int]`, for `typing`'s
+  alias class and `typing_extensions`' alike.
+- `NotRequired[int]`, `Required[int]` and `ReadOnly[int]`, whose call raises.
+  valgebra reads each as the type it qualifies. The only place vtjson reads a
+  qualifier is the top of a structural class's hint, where `_declared_fields`
+  strips a `typing.Required` or `typing.NotRequired` before the hint is
+  translated.
+- `Callable[[int], int]`, `typing.Sized` and `typing.Hashable`, whose call raises.
+  valgebra reads each as the class of values that have the method.
+
+`Generic` itself reports an origin, and vtjson reads it by the class arm, as an
+instance check.
 
 ## Strictness travels with the translation
 

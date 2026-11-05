@@ -18,6 +18,8 @@ literal is written in.
 
 from __future__ import annotations
 
+import re
+import typing
 from collections import (
     Counter,
     OrderedDict,
@@ -27,7 +29,17 @@ from collections import (
     defaultdict,
     deque,
 )
-from typing import TYPE_CHECKING, Any
+from dataclasses import dataclass
+from typing import (
+    TYPE_CHECKING,
+    Annotated,
+    Any,
+    Generic,
+    NamedTuple,
+    Optional,
+    Protocol,
+    TypeVar,
+)
 
 import pytest
 import vtjson as vt
@@ -109,6 +121,117 @@ def test_a_generic_over_a_foreign_origin_decides_as_vtjson_does(
         if (a := _decide(vt, schema, obj)) != (b := _decide(vg, schema, obj))
     ]
     assert not divergences, f"{label}: " + ", ".join(
+        f"{obj!r} vtjson={a} layer={b}" for obj, a, b in divergences
+    )
+
+
+_T = TypeVar("_T")
+# A field's value its declaration refuses, which is the point of the row.
+_TEXT: Any = "a"
+
+
+@dataclass
+class _Box(Generic[_T]):
+    item: _T
+
+
+@dataclass
+class _IntBox(_Box[int]):
+    pass
+
+
+class _Plain(Generic[_T]):
+    pass
+
+
+class _Row(NamedTuple, Generic[_T]):
+    x: _T
+
+
+class _Shape(Protocol[_T]):
+    item: _T
+
+
+# What the origin of each form below is asked about: a callable, a class, an
+# instance of each generic class, and the containers and scalars of `VALUES`.
+PLACED_APART: list[object] = [
+    *VALUES,
+    len,
+    str,
+    _Box(1),
+    _Box("a"),
+    _IntBox(1),
+    _IntBox(_TEXT),
+    _Plain(),
+    _Row(1),
+    _Row("a"),
+    re.compile("a"),
+]
+
+# vtjson reads a tuple, a `Mapping`, a `Container`, a union, a `Literal` and an
+# `Annotated` by what each is, and everything else with an origin by the rule it
+# gives any other schema: an instance check for a class, and a call for anything
+# callable. valgebra has a reading of its own for many of these, the set the
+# typing spec gives the form, so each row is one where the two readings part.
+UNPLACED: list[tuple[str, object]] = [
+    ("a generic dataclass applied", _Box[int]),
+    ("a generic dataclass applied to Any", _Box[Any]),
+    ("a generic dataclass applied to itself", _Box[_Box[int]]),
+    ("a dataclass deriving from one applied", _IntBox),
+    ("a generic class applied", _Plain[int]),
+    ("a generic protocol applied", _Shape[int]),
+    ("a generic NamedTuple applied", _Row[int]),
+    ("Generic", Generic),
+    ("Generic[T]", Generic[_T]),
+    ("Callable[[int], int]", typing.Callable[[int], int]),
+    ("abc.Callable[[int], int]", abc.Callable[[int], int]),
+    ("typing.Callable", typing.Callable),
+    ("typing.Hashable", typing.Hashable),
+    ("typing.Sized", typing.Sized),
+    ("typing.Iterable", typing.Iterable),
+    ("typing.Type", type),
+    ("re.Pattern[str]", re.Pattern[str]),
+    ("ClassVar[int]", typing.ClassVar[int]),
+    ("Final[int]", typing.Final[int]),
+    ("TypeGuard[int]", typing.TypeGuard[int]),
+]
+
+# Each position takes the form and the value that reaches it there, so a form
+# read one way alone and another way nested is a row of its own.
+POSITIONS: list[tuple[str, Callable[[Any], object], Callable[[Any], object]]] = [
+    ("alone", lambda form: form, lambda obj: obj),
+    ("a list element", lambda form: [form, ...], lambda obj: [obj]),
+    ("a field", lambda form: {"k": form}, lambda obj: {"k": obj}),
+    ("list[...]", lambda form: list[form], lambda obj: [obj]),
+    ("dict[str, ...]", lambda form: dict[str, form], lambda obj: {"k": obj}),
+    ("Optional[...]", lambda form: Optional[form], lambda obj: obj),  # noqa: UP045
+    ("Annotated[...]", lambda form: Annotated[form, object], lambda obj: obj),
+]
+
+
+@pytest.mark.parametrize(
+    ("place", "wrap", "lift"), POSITIONS, ids=[p[0] for p in POSITIONS]
+)
+@pytest.mark.parametrize(("label", "form"), UNPLACED, ids=[u[0] for u in UNPLACED])
+def test_a_form_vtjson_cannot_place_is_read_by_its_rule(
+    label: str,
+    form: object,
+    place: str,
+    wrap: Callable[[Any], object],
+    lift: Callable[[Any], object],
+) -> None:
+    """Valgebra's own reading of the form does not replace vtjson's."""
+    try:
+        schema = wrap(form)
+    except TypeError:
+        pytest.skip(f"{label} cannot be spelled at {place}")
+    divergences = [
+        (obj, a, b)
+        for obj in PLACED_APART
+        if (a := _decide(vt, schema, lift(obj)))
+        != (b := _decide(vg, schema, lift(obj)))
+    ]
+    assert not divergences, f"{label} at {place}: " + ", ".join(
         f"{obj!r} vtjson={a} layer={b}" for obj, a, b in divergences
     )
 

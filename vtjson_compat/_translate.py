@@ -9,7 +9,6 @@ meaning is expressed with the algebra so the accept/reject decision matches.
 import importlib
 import inspect
 import math
-import sys
 import threading
 import typing
 from collections import UserString
@@ -20,6 +19,7 @@ from typing import (
     Annotated,
     Any,
     Generic,
+    Literal,
     NamedTuple,
     TypeVar,
     Union,
@@ -589,10 +589,7 @@ def _translate(
     named = _named_outright(schema, exact=exact, open_records=open_records)
     if named is not None:
         return named
-    if isinstance(schema, type) and get_origin(schema) is None:
-        # A subscripted builtin generic answers `isinstance(..., type)` before
-        # 3.11, so asking that alone reads `dict[str, int]` as a class and hands
-        # it to valgebra whole. Having an origin is what tells the two apart.
+    if isinstance(schema, type):
         return _translate_type(schema, open_records=open_records)
     container = _container_translator(schema)
     if container is not None:
@@ -639,7 +636,7 @@ def _named_outright(
 
 # vtjson recognises `typing`'s alias class alone, which exists from 3.12.
 # `typing_extensions` defines a class of its own on every supported release,
-# and vtjson reads one as a callable.
+# and vtjson reads one as a callable, as `_unplaced` does.
 _TYPE_ALIAS: type | None = getattr(typing, "TypeAliasType", None)
 
 
@@ -707,10 +704,8 @@ def _translate_leaf(
     return _constant(schema)
 
 
-# The generics whose arguments are schemas. `Literal`'s are values, and a form
-# not listed here is handed to valgebra whole rather than taken apart. Both
-# spellings of a union are listed: before 3.14 `X | Y` and `Union[X, Y]` report
-# different origins.
+# The generics whose arguments are schemas. Both spellings of a union are listed:
+# before 3.14 `X | Y` and `Union[X, Y]` report different origins.
 _PARAMETERISED = (list, set, frozenset, tuple, dict, Union, UnionType)
 
 
@@ -736,67 +731,21 @@ def _translated_generic(
             return _foreign_generic(schema, origin, dict, open_records=open_records)
         if issubclass(origin, Container):
             return _foreign_generic(schema, origin, list, open_records=open_records)
-    if _is_alias(origin) or _is_qualifier(origin):
-        # vtjson has no rule for a subscripted alias, so it calls `Pair[int]`,
-        # and the call raises on every value. valgebra reads the same form as
-        # the alias's body with the argument in place, `list[int]`, which
-        # admits what vtjson refuses. A qualifier is the same: valgebra reads
-        # `NotRequired[int]` as `int`, and vtjson calls it.
-        return _unplaced(schema)
-    try:
+    if origin is Literal:
         return _validator(schema)
-    except NotImplementedError:
-        return _unplaced(schema)
-
-
-def _is_alias(origin: object) -> bool:
-    """Whether ``origin`` is a type alias, `typing`'s or `typing_extensions`'.
-
-    `typing_extensions` defines a class of its own on every supported release,
-    and valgebra reads an alias of either class. An alias of that class exists
-    only once the module is loaded, so the class is asked for there rather than
-    imported, which keeps the module off the layer's dependencies.
-    """
-    extensions = sys.modules.get("typing_extensions")
-    classes = (_TYPE_ALIAS, getattr(extensions, "TypeAliasType", None))
-    return any(kind is not None and isinstance(origin, kind) for kind in classes)
-
-
-# The qualifiers a `TypedDict` field carries, which valgebra unwraps wherever
-# they are written.
-_QUALIFIER_NAMES = ("Required", "NotRequired", "ReadOnly")
-
-
-def _is_qualifier(origin: object) -> bool:
-    """Whether ``origin`` is a qualifier, `typing`'s or `typing_extensions`'.
-
-    Each module defines a qualifier of its own on a release whose `typing`
-    lacks it, and the second is asked for only once the module is loaded, as
-    `_is_alias` asks.
-    """
-    extensions = sys.modules.get("typing_extensions")
-    return any(
-        origin is getattr(module, name, None)
-        for module in (typing, extensions)
-        for name in _QUALIFIER_NAMES
-        if module is not None
-    )
+    return _unplaced(schema)
 
 
 def _unplaced(schema: object) -> CompiledValidator:
     """Translate a subscripted generic by the rule vtjson gives any other schema.
 
     vtjson has no rule for its origin, so it falls through to the rule for any
-    other schema: an instance check for a class, a call for anything callable,
-    and equality for the rest. A form reaches here where valgebra builds no node
-    for it, or reads it apart from vtjson.
+    other schema: a call for anything callable, and equality for the rest.
+    valgebra is not asked first. It has a reading of its own for many of these,
+    the set the typing spec gives the form, and that reading would replace the
+    call: `Box[int]` for a generic dataclass, `Pair[int]` for an alias,
+    `NotRequired[int]`, `Callable[[int], int]`.
     """
-    if isinstance(schema, type):
-        # A subscripted generic answers `isinstance(..., type)` before 3.11, and
-        # an instance check against one raises rather than deciding — so the
-        # schema admits nothing. vtjson's verdict on `type[int]` flips with the
-        # interpreter for exactly this reason.
-        return _complement(_validator(_anything))
     if callable(schema):
         return _called(schema)
     # `P.args` and `P.kwargs` report `P` as their origin and are not callable,
@@ -830,7 +779,7 @@ def _foreign_generic(
         except Exception:  # noqa: BLE001  (a value that will not convert is not one)
             return False
 
-    return _intersect(_validator(origin), _predicate(check))
+    return _intersect(_instance_check(origin), _predicate(check))
 
 
 def _arguments(schema: object, kind: type) -> tuple[object, ...]:
@@ -912,7 +861,7 @@ def _foreign_container(
         except Exception:  # noqa: BLE001  (a value that will not convert is not one)
             return False
 
-    return _intersect(_validator(type(schema)), _predicate(check))
+    return _intersect(_instance_check(type(schema)), _predicate(check))
 
 
 def _translate_type(schema: type, *, open_records: bool = False) -> CompiledValidator:
@@ -982,7 +931,7 @@ def _of_own_class(schema: object, structure: CompiledValidator) -> CompiledValid
     kind = type(schema)
     if kind in _PLAIN:
         return structure
-    return _intersect(structure, _validator(kind))
+    return _intersect(structure, _instance_check(kind))
 
 
 def _translate_list(

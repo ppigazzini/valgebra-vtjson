@@ -22,7 +22,8 @@ from collections import (
     deque,
     namedtuple,
 )
-from typing import TYPE_CHECKING, Any
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Generic, NamedTuple, TypeVar
 
 import pytest
 import vtjson as vt
@@ -33,6 +34,30 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 Point = namedtuple("Point", "x y")  # noqa: PYI024
+
+_T = TypeVar("_T")
+
+
+# A field's value the checker would refuse, which is the point of the row.
+_ANY: Any = object
+
+
+class _Declared(NamedTuple):
+    x: int
+
+
+class _Row(NamedTuple, Generic[_T]):
+    x: _T
+
+
+@dataclass
+class _Listed(list):
+    item: Any = 0
+
+
+@dataclass
+class _GenericListed(list, Generic[_T]):
+    item: _T | None = None
 
 
 def _decide(module: Any, schema: object, obj: object) -> str:
@@ -73,6 +98,28 @@ ROWS: list[tuple[str, Callable[[Any], object], list[object]]] = [
         "frozenset schema",
         lambda m: frozenset({int, str}),  # noqa: ARG005
         [frozenset({int, str}), frozenset({1}), {1}, {int, str}],
+    ),
+    # The class is asked `isinstance` and nothing else, whatever it declares of
+    # its own: a field's type, or a parameter a field names.
+    (
+        "a NamedTuple declaring another type",
+        lambda m: _Declared(_ANY),  # noqa: ARG005
+        [_Declared(1), _Declared(_ANY), _Row("a"), ("a",), ["a"]],
+    ),
+    (
+        "a generic NamedTuple",
+        lambda m: _Row(int),  # noqa: ARG005
+        [_Row(1), _Row("a"), _Declared(1), (1,), [1]],
+    ),
+    (
+        "a dataclass deriving from list",
+        lambda m: _Listed(),  # noqa: ARG005
+        [_Listed(1), _Listed("a"), []],
+    ),
+    (
+        "a generic dataclass deriving from list",
+        lambda m: _GenericListed(),  # noqa: ARG005
+        [_GenericListed(1), _GenericListed("a"), []],
     ),
     # The plain builtins keep admitting every value they admitted.
     ("dict schema", lambda m: {"a": int}, [{"a": 1}, OrderedDict(a=1), {"a": "x"}]),  # noqa: ARG005
