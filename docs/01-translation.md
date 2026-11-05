@@ -298,6 +298,14 @@ The fixpoint is valgebra's, and so is how deep it reads a value: a value nested
 where vtjson reads on until Python's own recursion gives out. The ledger records
 that as a decision, and `tests/test_ledger_claims.py` measures it.
 
+## A bound vtjson asks of its own order
+
+vtjson asks `bound <= value`, so a bound written in a subclass of a builtin
+answers by its own comparison. valgebra's walk reads such a bound by the value it
+stores, so `_ordered` and `size` ask vtjson's question with a predicate there, and
+at a `nan`, which valgebra refuses to build. A bound in the builtin itself is a
+node, as is every other.
+
 ## Arguments are checked when the schema is built
 
 A bound that cannot be compared against, a pattern that will not compile, a

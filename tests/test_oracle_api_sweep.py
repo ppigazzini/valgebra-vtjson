@@ -92,6 +92,16 @@ class _Unhinted:
     pass
 
 
+class _HalfReversed(int):
+    """An integer whose `>=` and `<=` alone are the other way round."""
+
+    def __ge__(self, other: Any) -> bool:
+        return int(self) <= other
+
+    def __le__(self, other: Any) -> bool:
+        return int(self) >= other
+
+
 _Named = typing.NewType("_Named", int)
 # A `NamedTuple` holding schemas where its fields declare values.
 _PAIR_OF_TYPES: Any = _Pair(*typing.cast("tuple[Any, Any]", (int, str)))
@@ -412,6 +422,7 @@ CALLS: list[_Call] = [
             1j,
             _Plain,
             _Reversed(1),
+            _HalfReversed(1),
             math.nan,
             decimal.Decimal("NaN"),
             decimal.Decimal("sNaN"),
@@ -441,6 +452,9 @@ CALLS: list[_Call] = [
     _call("interval", _Reversed(2), ...),
     _call("interval", ..., _Reversed(2)),
     _call("interval", _Reversed(2), _Reversed(1)),
+    _call("interval", _HalfReversed(2), ...),
+    _call("interval", ..., _HalfReversed(2)),
+    _call("interval", True, ...),
     _call("interval", math.nan, 1),
     _call("interval", 0, math.nan),
     _call("interval", decimal.Decimal("NaN"), ...),
@@ -457,10 +471,15 @@ CALLS: list[_Call] = [
     _call("size", "a"),
     _call("size", 0, "a"),
     _call("size", True),
-    _call("size", 0, True),
     _call("size", _Reversed(2)),
     _call("size", 0, _Reversed(2)),
     _call("size", _Reversed(2), ...),
+    _call("size", _HalfReversed(2)),
+    _call("size", 0, _HalfReversed(2)),
+    _call("size", _HalfReversed(2), ...),
+    _call("size", _HalfReversed(1), _HalfReversed(2)),
+    _call("size", 0, True),
+    _call("size", False, ...),
     # Mappings and objects.
     _call("fields", {"x": int}),
     _call("fields", d={"x": int}),
@@ -1245,6 +1264,71 @@ def test_keys_building_one_validator_stay_two_clauses(
     assert not (lines := _divergences(schema, _KEYED_VALUES)), _report(lines)
 
 
+_CONSTANT_KEYS: list[object] = [1, None, (1,), b"a", 1.5]
+_CLAIMING: list[tuple[str, Callable[[Any, object], object]]] = [
+    ("int", lambda m, k: int),  # noqa: ARG005
+    ("object", lambda m, k: object),  # noqa: ARG005
+    ("quote", lambda m, k: m.quote(k)),
+    ("union", lambda m, k: m.union(k)),
+    ("anything", lambda m, k: m.anything),  # noqa: ARG005
+    ("complement(str)", lambda m, k: m.complement(str)),  # noqa: ARG005
+]
+
+
+@pytest.mark.parametrize("mode", ["alone", "lax"])
+@pytest.mark.parametrize(("claim", "clause"), _CLAIMING, ids=[c[0] for c in _CLAIMING])
+@pytest.mark.parametrize("key", _CONSTANT_KEYS, ids=repr)
+def test_a_constant_key_beside_a_clause_claiming_it(
+    key: object, claim: str, clause: Callable[[Any, object], object], mode: str
+) -> None:
+    """The key must be carried, and either schema may admit what it holds."""
+    del claim
+
+    def schema(m: Any) -> object:
+        written = {key: str, clause(m, key): int}
+        return m.lax(written) if mode == "lax" else written
+
+    objects: list[object] = [{}, {2: 1}, {2: "a"}, {"a": 1}]
+    objects += [{key: value} for value in ("a", 1, None)]
+    assert not (lines := _divergences(schema, objects)), _report(lines)
+
+
+class _RaisingEquality(int):
+    """An integer whose `==` raises for anything but a number."""
+
+    def __eq__(self, other: object) -> bool:
+        return int(self) == int(other)  # ty: ignore[invalid-argument-type]
+
+    __hash__ = int.__hash__
+
+
+def test_a_bound_whose_equality_raises_is_the_ledgered_build() -> None:
+    """The oracle reads the bound's `==` when it builds, the layer its order alone."""
+    with pytest.raises(TypeError):
+        vt.ge(_RaisingEquality(1))
+    assert vg.compile(vg.ge(_RaisingEquality(1))).is_valid(2)
+    assert "whose `==` raises" in _LEDGER
+
+
+@pytest.mark.parametrize(
+    "bound",
+    [lambda m: m.ge(1.5), lambda m: m.interval(1.5, ...), lambda m: m.gt(1.5)],
+    ids=["ge", "interval", "gt"],
+)
+def test_a_value_with_its_own_order_is_the_ledgered_asymmetry(
+    bound: Callable[[Any], object],
+) -> None:
+    """The oracle asks the bound of the value, and the walk the value of the bound.
+
+    Python asks the left operand first unless the right one's class derives from
+    it, so an integer ordered the other way round answers only the second.
+    """
+    value = _Reversed(2)
+    assert vt.compile(bound(vt)).__validate__(value, "object", True, {}) == ""
+    assert not vg.compile(bound(vg)).is_valid(value)
+    assert "order of its own" in _LEDGER
+
+
 @pytest.mark.parametrize(
     "keys",
     [
@@ -1476,7 +1560,7 @@ def test_a_schema_error_carries_its_message() -> None:
     ids=["validate", "make_type"],
 )
 def test_a_substitution_is_the_ledgered_refusal(ask: Callable[[Any], object]) -> None:
-    """Vtjson performs it, and the layer refuses rather than ignores it."""
+    """The oracle performs it, and the layer refuses rather than ignores it."""
     ask(vt)
     with pytest.raises(NotImplementedError):
         ask(vg)

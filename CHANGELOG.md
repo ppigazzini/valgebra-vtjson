@@ -230,6 +230,10 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `size` asks an end written in a subclass of `int` its own comparison, as `gt` and
+  the other bounds do, and a `True` bound is asked as vtjson asks it. `size(0,
+  _HalfReversed(2))` admitted every sized value where vtjson refuses a shorter one.
+
 - A typing union written as a dict key is a clause over the keys it matches, as
   any other schema is. `{int | None: str}`, `{Optional[int]: str}` and
   `{Union[int, str]: str}` were read as a key the value must carry, and refused

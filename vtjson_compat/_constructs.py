@@ -10,7 +10,7 @@ cannot handle, mirroring vtjson's reject.
 import math
 import operator
 import sys
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sized
 from types import EllipsisType
 from typing import Any
 
@@ -68,7 +68,7 @@ _STORED = (int, float, str, bytes)
 
 def _reads_its_own_order(bound: object) -> bool:
     """Whether ``bound`` is a subclass of a builtin, rather than the builtin."""
-    return isinstance(bound, _STORED) and type(bound) not in (*_STORED, bool)
+    return isinstance(bound, _STORED) and type(bound) not in _STORED
 
 
 def _ordered(**bounds: object) -> CompiledValidator:
@@ -148,6 +148,25 @@ def interval(
     return _ordered(**bounds)
 
 
+def _sized_by_its_own_order(low: int, high: int | None) -> CompiledValidator:
+    """Build the sized values whose length each end orders, by the end's own order.
+
+    vtjson compares a length with each end as it compares any value with any
+    bound, so an end in a subclass of `int` is asked its own comparison.
+    """
+    ends = {"ge": low} if high is None else {"ge": low, "le": high}
+
+    def check(obj: object) -> bool:
+        if not isinstance(obj, Sized):
+            return False
+        try:
+            return all(_ASKED[name](end, len(obj)) for name, end in ends.items())
+        except Exception:  # noqa: BLE001  (vtjson reads a raise as a failure)
+            return False
+
+    return _predicate(check)
+
+
 @_needs_arguments
 def size(lb: int, ub: int | EllipsisType | None = None) -> CompiledValidator:
     """Values whose ``len`` is bounded by ``lb`` and ``ub``.
@@ -167,6 +186,8 @@ def size(lb: int, ub: int | EllipsisType | None = None) -> CompiledValidator:
         if high < low:
             msg = f"the lower size bound {low} is bigger than the upper bound {high}"
             raise SchemaError(msg)
+    if _reads_its_own_order(low) or _reads_its_own_order(high):
+        return _sized_by_its_own_order(low, high)
     # `len` answers at most `sys.maxsize`, and valgebra refuses a bound past it
     # as one no value has. vtjson compares the length with each end all the
     # same, so a lower end past it admits nothing and an upper one bounds nothing.
