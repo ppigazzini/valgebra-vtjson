@@ -10,6 +10,7 @@ page names are ones its own command can be confirmed to have met.
 from __future__ import annotations
 
 import re
+import tomllib
 from pathlib import Path
 
 from benches.bench_vtjson_compare import LABELS, SHAPES
@@ -60,6 +61,39 @@ def test_the_page_says_how_to_confirm_the_interpreter_build() -> None:
     assert "Py_GIL_DISABLED" in _PAGE, (
         "docs/06-performance.md reports a GIL build but gives no way to confirm "
         "one: `--python 3.14` resolves to whatever 3.14 is installed"
+    )
+
+
+def _newest_claimed() -> str:
+    """Return the newest release the classifiers claim, as `3.15`."""
+    config = tomllib.loads((_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    prefix = "Programming Language :: Python :: 3."
+    minors = [
+        int(classifier.removeprefix(prefix))
+        for classifier in config["project"]["classifiers"]
+        if classifier.startswith(prefix)
+    ]
+    return f"3.{max(minors)}"
+
+
+def test_every_figure_is_measured_on_the_newest_interpreter_claimed() -> None:
+    """A release the project claims and the page does not read goes unmeasured.
+
+    Readings on two interpreters do not compare: one wheel reads a family slower
+    on one release and faster on the next. So the page's interpreter, the command
+    that reproduces it, and the lane that smoke-runs the benchmark all name the
+    newest release, and claiming a newer one fails here until they follow it.
+    """
+    newest = _newest_claimed()
+    baseline = _PAGE[_PAGE.index("## Baseline") : _PAGE.index("## Honest limits")]
+    assert re.search(rf"CPython {re.escape(newest)}\.\d+ standard build", baseline), (
+        f"docs/06-performance.md does not report CPython {newest}"
+    )
+    assert f"--python {newest}" in _PAGE, f"the page's command does not name {newest}"
+    lane = (_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    checks = lane[lane.index("  checks:") :]
+    assert f'python-version: "{newest}"' in checks, (
+        f"the lane smoke-running the benchmark does not read {newest}"
     )
 
 
