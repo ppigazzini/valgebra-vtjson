@@ -8,6 +8,9 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- The `formats` extra asks for dnspython 2.9.2 or later, the release the
+  differential suite runs on.
+
 - Python 3.11 or later, the floor valgebra sets, through 3.15. Every interpreter
   from 3.11 to 3.15 and the free-threaded 3.14t and 3.15t run the differential
   suite, and every test reaches the outcome it reached under the 3.10 floor.
