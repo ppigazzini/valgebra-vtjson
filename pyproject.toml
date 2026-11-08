@@ -39,11 +39,11 @@ packages = ["vtjson_compat"]
 [dependency-groups]
 dev = [
     "annotated-types>=0.8.0",
-    "hypothesis>=6.170.14",
+    "hypothesis>=6.170.15",
     "pytest>=9.2.0",
     "pytest-cov>=7.1.0",
-    "ruff>=0.17.3",
-    "ty>=0.0.97",
+    "ruff>=0.17.4",
+    "ty>=0.0.99",
     # Pinned, not floored: the differential suite is a claim about one
     # oracle version, and a floor makes that claim unreproducible.
     "vtjson==2.3.0",
