@@ -23,6 +23,11 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   free-threaded 3.14t and 3.15t, 24,818 on 3.13, 24,784 on 3.12 and 24,693 on the
   3.11 floor, against the pinned oracle.
 
+    `docs/06-performance.md` is measured on it on CPython 3.15.2, with 0.0.23
+    interleaved in the same session: the ten-thousand-element `[int, ...]` reads
+    32% slower, runs that do not overlap, and every other family lands within the
+    spread of its runs.
+
 - valgebra 0.0.23 or later. Most of what 0.0.21 through 0.0.23 change decides
   `subset` questions the layer does not ask, and building a validator runs none of
   them. What reaches the layer is a reading of a generic class applied, a refusal
