@@ -1277,14 +1277,15 @@ def _translate_dict(
     try:
         structure = _validator(translated)
     except NotImplementedError:
-        # A clause whose key is *narrowed* -- a regex, an interval, any vtjson
-        # construct -- names part of a key type rather than a whole one, and
-        # valgebra's map form takes a key type or a `Literal` and nothing
-        # between: two narrowed clauses can overlap without either containing
-        # the other, which is a question that model does not answer twice the
-        # same way. Its own advice is to check such keys *beside* the mapping
-        # rather than inside it, which is what this does, over the very clauses
-        # the loop above already compiled.
+        # valgebra keys a clause by a type, a `Literal`, or a `str` narrowed by
+        # a pattern or a length, and reads clauses whose keys overlap as a
+        # disjunction, as vtjson does. A key vtjson narrows reaches it as none
+        # of those: `regex` and `glob` are predicates, since vtjson's dialect is
+        # `re`'s; `interval`, the order bounds and `size` narrow `object`, not
+        # `str`; and valgebra refuses `intersect(str, size(...))`, a language of
+        # `str` written as a meet. Its advice for such a key is to check it
+        # *beside* the mapping rather than inside it, which is what this does,
+        # over the very clauses the loop above already compiled.
         #
         # What it costs is the structural reading of these dicts -- they decide
         # by running the clauses rather than by the shape -- and membership is
