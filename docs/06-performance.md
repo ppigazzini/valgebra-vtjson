@@ -49,7 +49,7 @@ interpreter — `--python cpython-3.15.2` — if the default resolves to the wro
 one.
 
 ```bash
-VIRTUAL_ENV=/tmp/bench uv pip install "valgebra==0.0.24" "vtjson==2.3.0" \
+VIRTUAL_ENV=/tmp/bench uv pip install "valgebra==0.0.25" "vtjson==2.3.0" \
   "annotated-types>=0.8" pytest pytest-benchmark
 VIRTUAL_ENV=/tmp/bench uv pip install -e . --no-deps
 /tmp/bench/bin/python -m pytest benches/bench_vtjson_compare.py \
@@ -60,23 +60,23 @@ VIRTUAL_ENV=/tmp/bench uv pip install -e . --no-deps
 ## Baseline
 
 AMD Ryzen 7 PRO 7840U (Zen 4 "Phoenix", a 2023-era mobile part) under WSL2 on
-Linux 6.18, CPython 3.15.2 standard build, valgebra 0.0.24 from PyPI, vtjson
+Linux 6.18, CPython 3.15.2 standard build, valgebra 0.0.25 from PyPI, vtjson
 2.3.0. Mean and standard deviation over at least two hundred rounds of a single
 membership check on a passing value, median of three runs, lower is better:
 
 | Family | valgebra | vtjson | valgebra faster by |
 | --- | --- | --- | --- |
-| Scalar (`int`) | 35 ns ± 6 ns | 811 ns ± 410 ns | 23.5x |
-| Union (4 arms) | 37 ns ± 16 ns | 1.91 us ± 1.05 us | 51.5x |
-| Refinement (bounded int) | 73 ns ± 30 ns | 1.04 us ± 497 ns | 14.3x |
-| Nested record + `[str, ...]` | 91 ns ± 30 ns | 3.03 us ± 1.62 us | 33.4x |
-| Format (regex) | 202 ns ± 103 ns | 1.05 us ± 589 ns | 5.2x |
-| Mapping `{str: int}`, 50 entries | 227 ns ± 78 ns | 14.50 us ± 12.07 us | 64.0x |
-| Deep nesting (12 levels) | 254 ns ± 345 ns | 6.69 us ± 2.95 us | 26.3x |
-| Record, 50 fields | 470 ns ± 87 ns | 10.94 us ± 4.30 us | 23.3x |
-| Heterogeneous `{str: int, int: bool}` | 580 ns ± 245 ns | 43.35 us ± 22.05 us | 74.7x |
-| `[int, ...]`, 10,000 elements | 14.78 us ± 17.08 us | 1273 us ± 212.87 us | 86.1x |
-| Prefix+tail `[str, int, ...]` | 42.17 us ± 21.53 us | 1287 us ± 180.79 us | 30.5x |
+| Scalar (`int`) | 30 ns ± 14 ns | 806 ns ± 404 ns | 26.7x |
+| Union (4 arms) | 37 ns ± 19 ns | 1.93 us ± 877 ns | 52.1x |
+| Refinement (bounded int) | 76 ns ± 26 ns | 1.02 us ± 544 ns | 13.4x |
+| Nested record + `[str, ...]` | 94 ns ± 32 ns | 3.05 us ± 1.69 us | 32.5x |
+| Format (regex) | 273 ns ± 199 ns | 1.03 us ± 291 ns | 3.8x |
+| Mapping `{str: int}`, 50 entries | 231 ns ± 71 ns | 14.35 us ± 5.31 us | 62.0x |
+| Deep nesting (12 levels) | 245 ns ± 99 ns | 6.66 us ± 2.53 us | 27.1x |
+| Record, 50 fields | 453 ns ± 170 ns | 11.08 us ± 4.13 us | 24.5x |
+| Heterogeneous `{str: int, int: bool}` | 614 ns ± 1.04 us | 43.08 us ± 15.41 us | 70.1x |
+| `[int, ...]`, 10,000 elements | 11.23 us ± 4.05 us | 1261 us ± 155.35 us | 112.3x |
+| Prefix+tail `[str, int, ...]` | 41.81 us ± 12.52 us | 1241 us ± 150.46 us | 29.7x |
 
 valgebra is faster on every family. The spread is wide in relative terms — a
 per-round standard deviation of a third is ordinary on a laptop under load — and
@@ -90,7 +90,7 @@ at every position — a homogeneous `[int, ...]` is one loop over one element
 schema, where a prefix and a tail is a machine that reads a different schema at
 the front.
 
-The **format** family is the narrowest at 5.2x, and it is the one place the two
+The **format** family is the narrowest at 3.8x, and it is the one place the two
 libraries run the same engine. A pattern is matched by Python's `re` on both
 sides, because the compatibility layer holds itself to `re`'s decisions:
 valgebra's native `Regex` is a Rust engine whose dialect differs on patterns

@@ -25,6 +25,12 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   24,818 on 3.13, 24,784 on 3.12 and 24,693 on the 3.11 floor, against the
   pinned oracle.
 
+    `docs/06-performance.md` is measured on it on CPython 3.15.2, with 0.0.24
+    interleaved in the same session: the ten-thousand-element `[int, ...]` reads
+    23% faster and the scalar 12% faster, the heterogeneous mapping 8% slower,
+    each in runs that do not overlap, and every other family lands within or
+    beside the spread of its runs.
+
 - valgebra 0.0.24 or later. Most of what it changes decides `subset` questions
   the layer does not ask. Its map form keys a clause by a `str` narrowed by a
   pattern or a length, where it refused one, and no key vtjson narrows reaches it
