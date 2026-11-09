@@ -1279,13 +1279,14 @@ def _translate_dict(
     except NotImplementedError:
         # valgebra keys a clause by a type, a `Literal`, or a `str` narrowed by
         # a pattern or a length, and reads clauses whose keys overlap as a
-        # disjunction, as vtjson does. A key vtjson narrows reaches it as none
-        # of those: `regex` and `glob` are predicates, since vtjson's dialect is
-        # `re`'s; `interval`, the order bounds and `size` narrow `object`, not
-        # `str`; and valgebra refuses `intersect(str, size(...))`, a language of
-        # `str` written as a meet. Its advice for such a key is to check it
-        # *beside* the mapping rather than inside it, which is what this does,
-        # over the very clauses the loop above already compiled.
+        # disjunction, as vtjson does. `intersect(str, size(...))` reaches it as
+        # that `str` narrowed by a length, so its dict keeps the native form.
+        # Every other key vtjson narrows reaches it as none of those: `regex`
+        # and `glob` are predicates, since vtjson's dialect is `re`'s, and
+        # `interval`, the order bounds and `size` alone narrow `object`, not
+        # `str`. Its advice for such a key is to check it *beside* the mapping
+        # rather than inside it, which is what this does, over the very clauses
+        # the loop above already compiled.
         #
         # What it costs is the structural reading of these dicts -- they decide
         # by running the clauses rather than by the shape -- and membership is
