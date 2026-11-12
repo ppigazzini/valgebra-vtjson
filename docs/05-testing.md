@@ -82,6 +82,12 @@ uv run ty check
 ```
 
 `.github/workflows/ci.yml` owns what CI runs, including the interpreter matrix.
+Beside the parity matrix and the checks it runs two audits: zizmor over the
+workflows, and pip-audit over every locked version, read from the lock as a
+PEP 751 file. `.github/dependabot.yml` proposes the actions and the locked
+packages weekly, past a seven-day cooldown, and leaves two to a commit of their
+own: valgebra, whose minor moves the floor, the ceiling and the performance
+page, and vtjson, the pinned oracle.
 
 ## What the gate cannot see
 

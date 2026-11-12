@@ -1,0 +1,35 @@
+version: 2
+# Every ecosystem waits seven days after a release before proposing it, so a
+# version pulled or compromised in its first week never reaches a pull request;
+# zizmor's `dependabot-cooldown` audit reads this.
+updates:
+  # The actions are pinned by commit, with the tag beside each; a proposal moves
+  # both.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: uv
+    directory: "/"
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      python:
+        patterns: ["*"]
+    ignore:
+      # A valgebra release moves the floor and the ceiling in `pyproject.toml`,
+      # the lock and the performance page in one commit, since a 0.0.x minor is
+      # a breaking release here; a lock-only bump would leave them behind.
+      - dependency-name: "valgebra"
+      # The oracle is pinned, not floored: the differential suite is a claim
+      # about one vtjson version, and a new one is read against the ledger
+      # before it is taken.
+      - dependency-name: "vtjson"
