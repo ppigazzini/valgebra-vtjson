@@ -544,7 +544,7 @@ requires-dist = [
     { name = "email-validator", marker = "extra == 'formats'", specifier = ">=2.3.0" },
     { name = "idna", marker = "extra == 'formats'", specifier = ">=3.20" },
     { name = "python-magic", marker = "extra == 'magic'", specifier = ">=0.4.27" },
-    { name = "valgebra", specifier = ">=0.0.25" },
+    { name = "valgebra", specifier = ">=0.0.25,<0.0.26" },
 ]
 provides-extras = ["formats", "magic"]
 

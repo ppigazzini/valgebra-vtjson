@@ -15,7 +15,9 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   from 3.11 to 3.15 and the free-threaded 3.14t and 3.15t run the differential
   suite, and every test reaches the outcome it reached under the 3.10 floor.
 
-- valgebra 0.0.25 or later. Most of what it changes decides `subset` questions
+- valgebra 0.0.25, below 0.0.26: a valgebra minor is a breaking release to the
+  layer, so each is taken by a release of the layer, with its suite run on it,
+  rather than by a resolver the day it lands. Most of what 0.0.25 changes decides `subset` questions
   the layer does not ask. Its map form keys a clause by a length or a pattern
   written over every value and met with `str`, so a dict keyed by
   `intersect(str, size(...))` keeps the native form, where 0.0.24 refused that
