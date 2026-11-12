@@ -8,6 +8,10 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- The package claims no `Typing :: Typed`: it ships no `py.typed`, and its
+  annotations are partial, so a type checker reading it as typed would read the
+  unannotated half as checked.
+
 - The `formats` extra asks for dnspython 2.9.2 or later, the release the
   differential suite runs on.
 
