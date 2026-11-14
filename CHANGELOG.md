@@ -29,6 +29,15 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   3.15t, 24,818 on 3.13, 24,784 on 3.12 and 24,693 on the 3.11 floor, against
   the pinned oracle.
 
+    `docs/06-performance.md` is measured on it on CPython 3.15.2, with 0.0.25
+    interleaved in the same session: the ten-thousand-element `[int, ...]` reads
+    29% slower, in runs that do not overlap, the prefix and tail 5% slower, and
+    every other family lands within or beside the spread of its runs. The 3.15
+    wheel alone reads the list slower: under cachegrind it runs within 0.2% of
+    0.0.25's instructions per check, and on CPython 3.11 to 3.14 the two releases
+    read the list alike, so the time lies in how that wheel is built, not in the
+    work it does or in the layer.
+
 - valgebra 0.0.25, below 0.0.26: a valgebra minor is a breaking release to the
   layer, so each is taken by a release of the layer, with its suite run on it,
   rather than by a resolver the day it lands. Most of what 0.0.25 changes decides `subset` questions
