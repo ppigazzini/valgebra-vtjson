@@ -294,7 +294,7 @@ def _deferred(build: Callable[..., CompiledValidator]) -> CompiledValidator:
     Typed as the validator it stands in for: `_Deferred` serves every validator
     attribute from a strict build, and no static type says so.
     """
-    return _Deferred(build)  # ty: ignore[invalid-return-type]
+    return _Deferred(build)  # ty: ignore[invalid-explicit-return]
 
 
 def _attributes_match(inner: Mapping[Any, CompiledValidator], obj: object) -> bool:
@@ -447,7 +447,7 @@ def _hooked(schema: object, *, open_records: bool) -> CompiledValidator:
     as it likes, so the predicate is the whole of the meaning rather than one
     part of it. It is read once, when the schema is built, as vtjson reads it.
     """
-    hook = schema.__validate__  # ty: ignore[unresolved-attribute]
+    hook = schema.__validate__  # ty: ignore[missing-attribute]
     strict = not open_records
 
     def check(obj: object) -> bool:
@@ -494,7 +494,7 @@ def _as_compiled(func: _Factory) -> _Factory:
     def made(*args: object, **kwargs: object) -> object:
         return _compile(func(*args, **kwargs))
 
-    return made  # ty: ignore[invalid-return-type]
+    return made  # ty: ignore[invalid-explicit-return]
 
 
 def _nullary(func: _Factory) -> _Factory:
@@ -541,7 +541,7 @@ def _wrapper_class(func: _Factory) -> _Factory:
         return _Deferred(lambda *, open_records: built)  # noqa: ARG005
 
     made.__dict__["_vtjson_bare"] = _admitting_nothing
-    return made  # ty: ignore[invalid-return-type]
+    return made  # ty: ignore[invalid-explicit-return]
 
 
 def _refused_bare(schema: Callable[..., object]) -> CompiledValidator:
@@ -880,7 +880,7 @@ def _translate_leaf(
         # item as a schema, under the base's strictness, and meet them all, or
         # those four kinds constrain nothing.
         base = _translate(
-            schema.__origin__,  # ty: ignore[unresolved-attribute]
+            schema.__origin__,  # ty: ignore[missing-attribute]
             exact=exact,
             open_records=open_records,
         )

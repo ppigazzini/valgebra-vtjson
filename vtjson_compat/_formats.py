@@ -197,7 +197,7 @@ def email(**kw: object) -> CompiledValidator:
         if not isinstance(obj, str):
             return False
         try:
-            email_validator.validate_email(obj, **kw)  # ty: ignore[unresolved-attribute]
+            email_validator.validate_email(obj, **kw)  # ty: ignore[missing-attribute]
         except Exception:  # noqa: BLE001  (any rejection means non-member)
             return False
         return True
@@ -225,12 +225,12 @@ def domain_name(
         if ascii_only and not ascii_re.fullmatch(obj):
             return False
         try:
-            idna.encode(obj, uts46=False)  # ty: ignore[unresolved-attribute]
-        except idna.core.IDNAError:  # ty: ignore[unresolved-attribute]
+            idna.encode(obj, uts46=False)  # ty: ignore[missing-attribute]
+        except idna.core.IDNAError:  # ty: ignore[missing-attribute]
             return False
         if resolve:
             try:
-                resolver.resolve(obj)  # ty: ignore[unresolved-attribute]
+                resolver.resolve(obj)  # ty: ignore[missing-attribute]
             except Exception:  # noqa: BLE001  (an unresolvable name is a non-member)
                 return False
         return True
@@ -253,7 +253,7 @@ def magic(mime_type: str, name: str | None = None) -> CompiledValidator:
         if not isinstance(obj, str | bytes):
             return False
         try:
-            detected = detector.from_buffer(obj, mime=True)  # ty: ignore[unresolved-attribute]
+            detected = detector.from_buffer(obj, mime=True)  # ty: ignore[missing-attribute]
         except Exception:  # noqa: BLE001  (any detection failure means non-member)
             return False
         return detected == mime_type
