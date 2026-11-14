@@ -19,6 +19,16 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   from 3.11 to 3.15 and the free-threaded 3.14t and 3.15t run the differential
   suite, and every test reaches the outcome it reached under the 3.10 floor.
 
+- valgebra 0.0.26, below 0.0.27. What 0.0.26 changes decides `subset` and
+  `not_subset` questions the layer does not ask, and it adds no node and no
+  annotation form. What reaches a caller is a failure's message, which the layer
+  raises as valgebra writes it: a key past eighty characters is written there as
+  its first eighty, `['kkk...]`, while each `path` in `errors` keeps it whole,
+  and long text is summarized from its head. Every test reaches the outcome it
+  reached on 0.0.25: 24,819 tests on 3.14, 3.15 and the free-threaded 3.14t and
+  3.15t, 24,818 on 3.13, 24,784 on 3.12 and 24,693 on the 3.11 floor, against
+  the pinned oracle.
+
 - valgebra 0.0.25, below 0.0.26: a valgebra minor is a breaking release to the
   layer, so each is taken by a release of the layer, with its suite run on it,
   rather than by a resolver the day it lands. Most of what 0.0.25 changes decides `subset` questions
