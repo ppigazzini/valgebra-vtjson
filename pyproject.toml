@@ -46,7 +46,7 @@ dev = [
     # Pinned, not floored: the differential suite is a claim about one
     # oracle version, and a floor makes that claim unreproducible.
     "vtjson==2.3.0",
-    "email-validator>=2.3.0",
+    "email-validator>=2.4.0",
     "idna>=3.20",
     "dnspython>=2.9.2",
     "python-magic>=0.4.27",
