@@ -35,6 +35,13 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   3.15t, 24,818 on 3.13, 24,784 on 3.12 and 24,693 on the 3.11 floor, against
   the pinned oracle.
 
+    `docs/06-performance.md` is measured on it on CPython 3.15.2, with 0.0.26
+    interleaved in the same session. In runs that do not overlap, the
+    ten-thousand-element `[int, ...]` reads 25% faster, the bounded int 8%, the
+    prefix and tail 7%, the nested record 2% and the 50-field record 1% faster,
+    and the heterogeneous mapping 3% slower; the scalar, the union, the mapping,
+    the deep nesting and the format land within the spread of their runs.
+
 - valgebra 0.0.26, below 0.0.27. What 0.0.26 changes decides `subset` and
   `not_subset` questions the layer does not ask, and it adds no node and no
   annotation form. What reaches a caller is a failure's message, which the layer
