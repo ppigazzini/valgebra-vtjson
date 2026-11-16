@@ -19,6 +19,22 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   from 3.11 to 3.15 and the free-threaded 3.14t and 3.15t run the differential
   suite, and every test reaches the outcome it reached under the 3.10 floor.
 
+- valgebra 0.0.28, below 0.0.29, taken from 0.0.26: no release of the layer
+  takes 0.0.27. What 0.0.27 fixes lies in relations and in questions asked
+  inside a `recursive` builder, neither of which the layer asks, and 0.0.28 adds
+  no node, no annotation form and no fix. What reaches a caller is how often a
+  custom check runs. A dict whose schema holds a typed catch-all, `{"a": check,
+  "b": int, str: int}`, reads `b` before it runs the check of `a`, whichever
+  order the schema or the value names them, and `validate` explaining a refusal
+  resumes where the first pass stopped. A value refused at `b` runs the check no
+  time under `is_valid` and once under `validate`, where 0.0.26 ran it once and
+  twice when the value named `a` first; one refused at an undeclared key runs it
+  once under each, where 0.0.26 ran it once and twice. A value that passes, and
+  a dict with no catch-all, run it as before. Every test reaches the outcome it
+  reached on 0.0.26: 24,819 tests on 3.14, 3.15 and the free-threaded 3.14t and
+  3.15t, 24,818 on 3.13, 24,784 on 3.12 and 24,693 on the 3.11 floor, against
+  the pinned oracle.
+
 - valgebra 0.0.26, below 0.0.27. What 0.0.26 changes decides `subset` and
   `not_subset` questions the layer does not ask, and it adds no node and no
   annotation form. What reaches a caller is a failure's message, which the layer
