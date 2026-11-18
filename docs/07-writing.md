@@ -3,7 +3,7 @@
 These govern the shipped prose — this set, `README.md`, `AGENTS.md`,
 `CLAUDE.md`, the pages under `docs/` — and the comments in the source.
 
-**valgebra's [writing rules](https://github.com/ppigazzini/valgebra/blob/main/docs/dev/12-writing.md)
+**valgebra's [writing rules](https://github.com/ppigazzini/valgebra/blob/main/docs/dev/writing.md)
 apply here unchanged.** State the page contract first; say what a schema means as
 a set of values; separate a verified fact from a decision; describe a gap as a
 gap; verify the claim against the tree; never pin a number or a list that a gate
