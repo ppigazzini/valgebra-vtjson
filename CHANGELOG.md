@@ -19,14 +19,12 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   from 3.11 to 3.15 and the free-threaded 3.14t and 3.15t run the differential
   suite, and every test reaches the outcome it reached under the 3.10 floor.
 
-- valgebra 0.0.30 or later, with no upper bound: a ceiling cannot be lifted
+- valgebra 0.0.32 or later, with no upper bound: a ceiling cannot be lifted
   from a published version, so a valgebra release installs beside the layer the
-  day it is published, as valgebra names a companion's floor. 0.0.30 adds
-  answers to relations alone, which the layer asks none of: no answer, no
-  message and no error code of 0.0.29 moves. Every test reaches the outcome it
-  reached on 0.0.29: 24,819 tests on 3.14, 3.15 and the free-threaded 3.14t and
-  3.15t, 24,818 on 3.13, 24,784 on 3.12 and 24,693 on the 3.11 floor, against
-  the pinned oracle.
+  day it is published, as valgebra names a companion's floor. 0.0.31 and 0.0.32
+  add answers to relations, which the layer asks none of, and walk lists in
+  fewer instructions. On 0.0.32 as PyPI serves it, 24,819 tests pass and 6 skip
+  on 3.15 against the pinned oracle.
 
 - valgebra 0.0.29, below 0.0.30. 0.0.29 changes no answer, no message and no
   error code of 0.0.28: its own source differs in comments alone, and its wheels
