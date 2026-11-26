@@ -51,7 +51,10 @@ asserts they reach the same accept/reject decision, so any drift fails a test.
 The headline corpus is [fishtest](https://github.com/official-stockfish/fishtest)'s
 own schemas — fetched at a pinned commit and never vendored (they carry no
 license). Every schema it defines reaches the same decision through both
-engines, the full run document and the schema-keyed tables included;
+engines, the full run document and the schema-keyed tables included, but the
+ledger's typed-singleton rows: a finished run writes `0.0` for `nps` and
+`games_per_minute`, which refuses the int `0` vtjson's `==` admits, and
+`union(0, 0.0)` is the spelling that admits both;
 `tests/test_fishtest_upstream.py` owns that list and fails on a schema it does
 not cover, so a schema fishtest adds cannot go quietly untested. A
 parity-inventory test classifies every name on vtjson's public surface as
@@ -59,7 +62,8 @@ supported, ledgered, or infrastructure, so a vtjson release cannot add a
 construct that silently goes unsupported.
 
 That makes this repo valgebra's real-world proving ground: if the core can carry
-fishtest's schemas with exact parity, it can carry a real codebase's. The
+fishtest's schemas with decision parity, every difference a row of the ledger,
+it can carry a real codebase's. The
 construct mapping and the full ledger of intentional differences are in
 [docs/03-conformance.md](docs/03-conformance.md).
 
