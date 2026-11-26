@@ -187,7 +187,9 @@ its keyed-default mapping node carries the rest.
 The compatibility layer is checked against the real
 [fishtest](https://github.com/official-stockfish/fishtest) schemas, which are
 fetched at a pinned commit and run through both vtjson and the compatibility
-layer. Every string-keyed schema — including the full run document
+layer. Where fishtest's master holds another `schemas.py` than the pin, a test
+warns, never fails, and names the commit that last touched the file, the one to
+read and pin next. Every string-keyed schema — including the full run document
 (`runs_schema`), `api_schema`, every variant of `action_schema`, and
 `results_schema` — is seeded with documents written for the test, which both
 accept, and every mutation of a seed reaches vtjson's decision: a key added or

@@ -20,11 +20,13 @@ from __future__ import annotations
 import copy
 import datetime as dt
 import gzip
+import json
 import math
 import re
 import types
 import urllib.error
 import urllib.request
+import warnings
 
 import pytest
 import vtjson as vt
@@ -36,6 +38,17 @@ _COMMIT = "66fd95217be9b1365d9432933d8e2f5f86c9ab0a"
 _URL = (
     "https://raw.githubusercontent.com/official-stockfish/fishtest/"
     f"{_COMMIT}/server/fishtest/schemas.py"
+)
+
+# The same file on fishtest's master, and the commits that last touched it: read
+# only to say when master holds another schemas.py than the pin.
+_MASTER_URL = (
+    "https://raw.githubusercontent.com/official-stockfish/fishtest/"
+    "master/server/fishtest/schemas.py"
+)
+_HISTORY_URL = (
+    "https://api.github.com/repos/official-stockfish/fishtest/commits"
+    "?path=server/fishtest/schemas.py&per_page=1"
 )
 
 # The vtjson constructs schemas.py imports; injected from whichever library.
@@ -134,11 +147,18 @@ class _ObjectId:
         return isinstance(oid, str) and cls._HEX.match(oid) is not None
 
 
-def _fetch_source() -> str | None:
+def _fetched(url: str) -> str | None:
+    """Return the text at ``url``, or `None` where it cannot be read."""
     try:
-        with urllib.request.urlopen(_URL, timeout=15) as response:  # noqa: S310
-            raw = response.read().decode("utf-8")
+        with urllib.request.urlopen(url, timeout=15) as response:  # noqa: S310
+            return response.read().decode("utf-8")
     except (urllib.error.URLError, TimeoutError, OSError):
+        return None
+
+
+def _fetch_source() -> str | None:
+    raw = _fetched(_URL)
+    if raw is None:
         return None
     # Drop the imports we inject into the namespace instead. A negated class
     # ([^)]*) already spans newlines, so the parenthesized imports need no
@@ -513,6 +533,36 @@ def test_fishtest_upstream_mapping_keyed_parity() -> None:
 
     assert checked > 0, "no mapping-keyed schema/document pairs were checked"
     assert accepted > 0, "no accept path was exercised; the corpus is too weak"
+
+
+class UpstreamMovedWarning(UserWarning):
+    """fishtest's master holds another ``schemas.py`` than the pinned commit's."""
+
+
+def test_the_pin_is_read_against_upstream() -> None:
+    """Warn, never fail, where fishtest's master has moved past the pin.
+
+    A moved file is no failure of this layer: the pin is what the conformance
+    claim reads. The warning names the commit that last touched the file, the
+    one to read and pin next, so the pin does not age unread.
+    """
+    pinned, master = _fetched(_URL), _fetched(_MASTER_URL)
+    if pinned is None or master is None:
+        pytest.skip("the fishtest schema source is not reachable (offline)")
+    if master == pinned:
+        return
+    history = _fetched(_HISTORY_URL)
+    try:
+        latest = json.loads(history)[0]["sha"] if history else None
+    except (ValueError, LookupError, TypeError):
+        latest = None
+    warnings.warn(
+        UpstreamMovedWarning(
+            f"fishtest's master holds another schemas.py than {_COMMIT[:12]}; "
+            f"read {latest[:12] if latest else 'its history'} and pin it next"
+        ),
+        stacklevel=1,
+    )
 
 
 def test_fishtest_covers_every_schema() -> None:
