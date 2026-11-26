@@ -18,6 +18,7 @@ as `docs/03-conformance.md` records.
 
 from __future__ import annotations
 
+import contextlib
 import datetime as dt
 import decimal
 import enum
@@ -26,6 +27,7 @@ import inspect
 import math
 import pathlib
 import re
+import sys
 import typing
 import warnings
 from collections import OrderedDict, UserDict, UserList, defaultdict, deque
@@ -1747,10 +1749,36 @@ def test_a_call_decides_alike_however_it_is_asked(call: _Call, entry: _Entry) ->
     assert not lines, _report(lines)
 
 
+def _asks_a_template(call: _Call) -> bool:
+    """Whether ``call`` compiles a pattern under `re.TEMPLATE`, its flag bit 1.
+
+    Python 3.11 and 3.12 deprecate the flag and warn where a pattern compiles
+    under it; 3.13 removed it.
+    """
+    flags = call.kwargs.get("flags", call.args[3] if len(call.args) > 3 else 0)
+    return (
+        sys.version_info < (3, 13)
+        and call.name == "regex"
+        and isinstance(flags, int)
+        and bool(flags & 1)
+    )
+
+
 @pytest.mark.parametrize("call", _junk_calls(), ids=lambda c: c.label)
 def test_a_call_at_any_argument_decides_as_the_oracle_does(call: _Call) -> None:
-    """A construct takes what vtjson's takes, and refuses what vtjson's refuses."""
-    assert not (lines := _divergences(call.build, VALUES)), _report(lines)
+    """A construct takes what vtjson's takes, and refuses what vtjson's refuses.
+
+    A pattern compiled under `re.TEMPLATE` is one the interpreter warns of before
+    3.13, so the row asserts that warning there, as the answer to what it asks.
+    `re` keeps what it compiled, and `True` and `1` are one key, so the row clears
+    it first: a pattern another row compiled would be no compile, and no warning.
+    """
+    asked = contextlib.nullcontext()
+    if _asks_a_template(call):
+        re.purge()
+        asked = pytest.warns(DeprecationWarning, match="re.TEMPLATE")
+    with asked:
+        assert not (lines := _divergences(call.build, VALUES)), _report(lines)
 
 
 @pytest.mark.parametrize("position", POSITIONS, ids=[p[0] for p in POSITIONS])
