@@ -777,6 +777,107 @@ def _instantiated(schema: type[compiled_schema]) -> compiled_schema:
         raise SchemaError(msg) from None
 
 
+#: How many schemas `validate` and `safe_cast` keep translated, the latest asked.
+#: A caller writing a fresh literal each call keeps none of its own, and the
+#: bound keeps those from growing the table.
+_KEPT = 64
+
+#: Each schema `validate` and `safe_cast` translated, by its identity and its
+#: mode: the schema, held so its identity stays its own, the parts a caller may
+#: change in place with what each held, and its translation.
+_TRANSLATED: dict[
+    tuple[int, bool], tuple[object, list[tuple[object, object]], CompiledValidator]
+] = {}
+_TRANSLATED_LOCK = threading.Lock()
+
+
+def _closure(deferred: _Deferred) -> tuple[object, ...]:
+    """Return what a construct waiting for its mode was handed, its build's cells."""
+    cells = getattr(deferred._build, "__closure__", None) or ()  # noqa: SLF001
+    return tuple(cell.cell_contents for cell in cells)
+
+
+def _holds(part: object) -> object:
+    """Return what a part a caller may change in place holds now, by identity."""
+    if isinstance(part, Mapping):
+        return [
+            (key if type(key) is str else id(key), id(value))
+            for key, value in part.items()
+        ]
+    if isinstance(part, AbstractSet):
+        return set(part)
+    if isinstance(part, Sequence):
+        return [id(value) for value in part]
+    return id(part)
+
+
+def _changeable_parts(schema: object) -> list[tuple[object, object]] | None:
+    """Return each part of ``schema`` a caller may change in place, with what it holds.
+
+    A mapping, a list and a set may be changed in place, as may one written in a
+    class of its own; a tuple, a string and a frozen set hold what they held, and
+    a construct waiting for its mode holds what it was handed, which is read
+    through. A schema holding a caller's own wrapper is `None`, kept by no table:
+    vtjson asks a wrapper's `__compile__` again on every call, and so does the
+    layer.
+    """
+    found: list[object] = []
+    seen: set[int] = set()
+    pending = [schema]
+    while pending:
+        part = pending.pop()
+        if id(part) in seen or isinstance(part, (str, bytes)):
+            continue
+        seen.add(id(part))
+        if isinstance(part, _Deferred):
+            pending.extend(_closure(part))
+        elif isinstance(part, wrapper):
+            return None
+        elif isinstance(part, Mapping):
+            found.append(part)
+            pending.extend(part.values())
+            pending.extend(key for key in part if type(key) is not str)
+        elif isinstance(part, AbstractSet):
+            if not isinstance(part, frozenset):
+                found.append(part)
+        elif isinstance(part, Sequence):
+            if not isinstance(part, tuple):
+                found.append(part)
+            pending.extend(part)
+    return [(part, _holds(part)) for part in found]
+
+
+def _translated_for_a_call(schema: object, *, open_records: bool) -> CompiledValidator:
+    """Return the translation `validate` and `safe_cast` check a value against.
+
+    vtjson compiles the schema on every call, and so did this layer: a call on
+    fishtest's run schema spent nearly all its time translating. A translation is
+    kept for the schema it was made from, and served while every part a caller
+    may change in place holds what it held, so a schema changed between two calls
+    is translated again, as vtjson reads it again. A translation asked inside
+    another, which may hold a fixpoint still being closed, is not kept.
+    """
+    if _recursion().depth:
+        return _translate(schema, open_records=open_records)
+    key = (id(schema), open_records)
+    kept = _TRANSLATED.get(key)
+    if (
+        kept is not None
+        and kept[0] is schema
+        and all(_holds(part) == held for part, held in kept[1])
+    ):
+        return kept[2]
+    built = _translate(schema, open_records=open_records)
+    parts = _changeable_parts(schema)
+    if parts is not None:
+        with _TRANSLATED_LOCK:
+            _TRANSLATED.pop(key, None)
+            _TRANSLATED[key] = (schema, parts, built)
+            while len(_TRANSLATED) > _KEPT:
+                del _TRANSLATED[next(iter(_TRANSLATED))]
+    return built
+
+
 def _translate(
     schema: object, *, exact: bool = False, open_records: bool = False
 ) -> CompiledValidator:

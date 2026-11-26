@@ -8,6 +8,15 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- `validate` and `safe_cast` keep a schema's translation and serve it while
+  every part a caller may change in place holds what it held, so a schema
+  changed between two calls is read again, as vtjson reads it. They translated
+  the schema on every call, as vtjson compiles it: a call on fishtest's run
+  schema spent 1,469 of its 1,587 us translating, and now takes 49 us, where
+  vtjson's takes 1,617 (CPython 3.15, one core). A schema holding a caller's
+  own `wrapper` is translated on every call, and the table keeps the latest 64
+  schemas.
+
 - A refusal carries one failure, as vtjson's does. `validate`, `safe_cast` and
   a compiled schema's `__validate__` report the first failure of valgebra's
   report and stop the walk there, through valgebra 0.0.35's `limit`, where

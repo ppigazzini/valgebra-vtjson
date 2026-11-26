@@ -104,7 +104,10 @@ narrow margin is that choice, not a limit of the walk.
 - vtjson's default `validate(schema, obj)` recompiles the schema on every call,
   which is slower still (for the 50-field record, ~200 us per call versus the
   ~11 us compile-once path measured above). The table uses vtjson's compile-once
-  path, its best case, to keep the comparison fair.
+  path, its best case, to keep the comparison fair. The layer's `validate` keeps
+  the translation of a schema nothing changed in place, so its default path pays
+  a read of the schema's changeable parts beside the walk, not a translation
+  ([translation](01-translation.md#a-schema-translated-for-a-call-is-kept)).
 - valgebra and vtjson reach the same decision here only for the constructs the
   compatibility layer supports; the differences ledger
   (`03-conformance.md`) records where valgebra deliberately decides

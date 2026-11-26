@@ -295,6 +295,21 @@ interpreter, and a union is built from the *translated* arguments rather than by
 subscripting `Union`. Both facts are interpreter-shaped; see
 [04-interpreters.md](04-interpreters.md).
 
+## A schema translated for a call is kept
+
+`validate` and `safe_cast` translate the schema they are handed, and vtjson
+compiles its schema on every call, so a schema a caller changes in place between
+two calls is read as it stands at each. `_translated_for_a_call` keeps a
+translation for the schema it was made from, by the schema's identity and its
+strictness, the schema held so the identity stays its own, and serves it while
+every part a caller may change in place holds what it held: each mapping, list
+and set the schema reaches, read through a construct waiting for its mode to
+what it was handed. A part that changed translates the schema again. A schema
+holding a caller's own `wrapper` is never kept, since vtjson asks its
+`__compile__` on every call. The table keeps the latest `_KEPT` schemas, so a
+fresh literal written at each call cannot grow it. `compile` is the way to
+translate once whatever changes after, as vtjson's compiled schema is.
+
 ## A schema that contains itself
 
 A container already being translated is a **back edge**, not a subtree to

@@ -92,7 +92,7 @@ from ._translate import (
     SchemaError,
     _compile,
     _nullary,
-    _translate,
+    _translated_for_a_call,
     compiled_schema,
     optional_key,
     wrapper,
@@ -205,4 +205,4 @@ def validate(
             "express recursion with valgebra's recursive fixpoint"
         )
         raise NotImplementedError(msg)
-    _translate(schema, open_records=not strict).validate(obj, limit=1)
+    _translated_for_a_call(schema, open_records=not strict).validate(obj, limit=1)

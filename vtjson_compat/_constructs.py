@@ -29,6 +29,7 @@ from ._translate import (
     _structural,
     _text,
     _translate,
+    _translated_for_a_call,
     _wrapper_class,
     optional_key,
 )
@@ -599,7 +600,7 @@ def safe_cast(schema: object, obj: object) -> object:
     A refusal carries one failure, as `validate`'s does: a validator's
     `ensure` takes no count, so the value is validated and handed back.
     """
-    _translate(schema).validate(obj, limit=1)
+    _translated_for_a_call(schema, open_records=False).validate(obj, limit=1)
     return obj
 
 
