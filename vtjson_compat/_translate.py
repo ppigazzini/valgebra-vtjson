@@ -255,7 +255,7 @@ class _Compiled(_Waiting, compiled_schema):
             )
             raise NotImplementedError(msg)
         try:
-            self._under(open_records=not strict).validate(obj)
+            self._under(open_records=not strict).validate(obj, limit=1)
         except ValidationError as exc:
             return str(exc)
         return ""

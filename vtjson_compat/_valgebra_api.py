@@ -88,7 +88,7 @@ def fixed_sequence(*elements: object) -> CompiledValidator:
     sequence is expressed as a homogeneous list pinned to length one.
     """
     if len(elements) == 1:
-        one = Annotated[list[elements[0]], at.MinLen(1), at.MaxLen(1)]  # ty: ignore[invalid-type-form]
+        one = Annotated[list[elements[0]], at.Len(1, 1)]  # ty: ignore[invalid-type-form]
         return CompiledValidator(one)
     return CompiledValidator(list(elements))
 
@@ -100,9 +100,9 @@ def ifthen(
 ) -> CompiledValidator:
     """Require ``then`` when a value matches ``condition``, else ``otherwise``.
 
-    Denotation ``(condition and then) or ((not condition) and otherwise)``;
-    composed from the core algebra, replacing valgebra's dropped derived
-    combinator. With the default ``otherwise`` this is "condition implies then".
+    Denotation ``(condition and then) or ((not condition) and otherwise)``:
+    valgebra's conditional recipe, ``implies``, under vtjson's name. With the
+    default ``otherwise`` this is "condition implies then".
     """
     return union(
         intersect(condition, then),
@@ -117,12 +117,10 @@ def cond(
     """Select the ``then`` of the first matching ``(condition, then)`` case.
 
     Nests :func:`ifthen` from the last case inward, so the earliest matching case
-    wins; an unmatched value must satisfy ``default``.
+    wins; an unmatched value must satisfy ``default``. It is valgebra's
+    first-matching-case recipe, under vtjson's name.
     """
-    result: object = default
+    result = CompiledValidator(default)
     for condition, then in reversed(cases):
         result = ifthen(condition, then, result)
-    if isinstance(result, CompiledValidator):
-        return result
-    # No cases: coerce a bare default spec into a validator.
-    return union(result)
+    return result

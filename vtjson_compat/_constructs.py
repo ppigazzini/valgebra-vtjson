@@ -594,8 +594,13 @@ def make_type(
 
 
 def safe_cast(schema: object, obj: object) -> object:
-    """Validate ``obj`` against ``schema`` and return it unchanged."""
-    return _translate(schema).ensure(obj)
+    """Validate ``obj`` against ``schema`` and return it unchanged.
+
+    A refusal carries one failure, as `validate`'s does: a validator's
+    `ensure` takes no count, so the value is validated and handed back.
+    """
+    _translate(schema).validate(obj, limit=1)
+    return obj
 
 
 @_wrapper_class

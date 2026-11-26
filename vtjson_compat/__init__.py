@@ -191,10 +191,12 @@ def validate(
 ) -> None:
     """Validate ``obj`` against a vtjson-style ``schema``.
 
-    Raises valgebra's ``ValidationError`` on failure. ``name`` is accepted for
-    vtjson signature parity and is cosmetic. ``strict=False`` opens every record
-    (the lax mode). Validate-time ``subs`` substitution is not supported — use
-    the ``recursive`` fixpoint for recursion.
+    Raises valgebra's ``ValidationError`` on failure, carrying the first failure
+    of valgebra's report alone, as vtjson's names one; the walk stops there.
+    ``name`` is accepted for vtjson signature parity and is cosmetic.
+    ``strict=False`` opens every record (the lax mode). Validate-time ``subs``
+    substitution is not supported — use the ``recursive`` fixpoint for
+    recursion.
     """
     del name  # accepted for vtjson signature parity; cosmetic
     if subs:
@@ -203,4 +205,4 @@ def validate(
             "express recursion with valgebra's recursive fixpoint"
         )
         raise NotImplementedError(msg)
-    _translate(schema, open_records=not strict).validate(obj)
+    _translate(schema, open_records=not strict).validate(obj, limit=1)

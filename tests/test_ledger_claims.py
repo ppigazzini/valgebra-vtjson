@@ -134,3 +134,26 @@ def test_the_ledger_names_the_depth_a_value_is_read_to(
         vg.validate(schema(vg), nest(depth))
     assert refused.value.code == "recursion_limit"
     vt.validate(schema(vt), nest(depth))
+
+
+def test_a_refusal_reports_one_failure_as_vtjson_does() -> None:
+    """The error report row: a value wrong in four places is refused by one.
+
+    vtjson's report is the first failure its walk meets. The layer's is the
+    first of valgebra's report, so a call that refuses pays for that one, and a
+    caller reading `err.errors` reads one violation however many the value has.
+    """
+    schema = {"a": int, "b": int, "c": [str, ...]}
+    value = {"a": "x", "b": "y", "c": [1, 2]}
+    with pytest.raises(vt.ValidationError):
+        vt.validate(schema, value)
+    with pytest.raises(vg.ValidationError) as validated:
+        vg.validate(schema, value)
+    with pytest.raises(vg.ValidationError) as cast:
+        vg.safe_cast(schema, value)
+    assert len(validated.value.errors) == len(cast.value.errors) == 1
+    assert validated.value.path == cast.value.path == ("a",)
+    explanation = vg.compile(schema).__validate__(value, "object", True, {})
+    assert explanation == str(validated.value)
+    row = next(line for line in _LEDGER.splitlines() if "| Error report |" in line)
+    assert "one structured violation" in row
