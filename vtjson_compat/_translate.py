@@ -6,6 +6,7 @@ valgebra's native frontend (lists, ``float``), and where vtjson is lax the lax
 meaning is expressed with the algebra so the accept/reject decision matches.
 """
 
+import contextvars
 import functools
 import importlib
 import inspect
@@ -15,7 +16,7 @@ import typing
 from collections import UserString
 from collections.abc import Callable, Container, Mapping, Sequence
 from collections.abc import Set as AbstractSet
-from types import UnionType
+from types import FunctionType, UnionType
 from typing import (
     Annotated,
     Any,
@@ -353,7 +354,7 @@ def _structural(
     inner = {
         name: _translate(hint, open_records=open_records) for name, _, hint in declared
     }
-    return _predicate(lambda obj: _attributes_match(inner, obj))
+    return _predicate(lambda obj: _attributes_match(inner, obj), _name(schema))
 
 
 # vtjson reads the presence qualifiers from `typing` alone; one
@@ -395,9 +396,101 @@ def _declared_fields(schema: object) -> list[tuple[str, bool, object]]:
     return declared
 
 
-def _predicate(check: object) -> CompiledValidator:
-    """Build a validator that admits a value iff ``check(value)`` is truthy."""
+def _predicate(check: FunctionType, name: str) -> CompiledValidator:
+    """Build a validator that admits a value iff ``check(value)`` is truthy.
+
+    valgebra names a failed predicate by its callable's `__qualname__`, so the
+    check takes ``name``, the name vtjson's message gives the schema, where the
+    layer's own, ``email.<locals>.check``, would stand. Each check is made for
+    its one schema, so the name renames nothing else.
+    """
+    check.__qualname__ = name
     return _validator(Annotated[object, check])
+
+
+def _to_name(item: object) -> str:
+    """Return the name vtjson gives ``item`` inside the name of a construct."""
+    if hasattr(item, "__name__"):
+        return str(item.__name__)
+    if isinstance(item, str):
+        return repr(item)
+    if item is Ellipsis:
+        return "..."
+    return str(item)
+
+
+def _generic_name(origin: object, arguments: Sequence[object]) -> str:
+    """Return the name vtjson gives a generic: its origin, then its arguments."""
+    return f"{_to_name(origin)}[{','.join(_to_name(item) for item in arguments)}]"
+
+
+# The name of the construct a factory is building, which the checks it makes
+# take: set by the decorator that sees the call, read in the factory's body.
+_BUILDING: contextvars.ContextVar[str] = contextvars.ContextVar("_BUILDING")
+
+
+def _this_construct() -> str:
+    """Return the name vtjson gives the construct being built."""
+    return _BUILDING.get()
+
+
+_POSITIONAL = (
+    inspect.Parameter.POSITIONAL_ONLY,
+    inspect.Parameter.POSITIONAL_OR_KEYWORD,
+)
+
+
+class _CallName:
+    """The name vtjson gives a construct, read off the call that made it.
+
+    vtjson names a construct by the call that made it: its class, then each
+    argument as it was passed, a positional one bare unless the parameter has a
+    default, and one equal to its default left out, so `div(3)` and
+    `div(divisor=3)` are two names for one schema. A construct given a `name`
+    takes that one. The signature is read once, when the factory is tagged, so
+    a call pays for its own arguments alone; a call the signature refuses raises
+    when it is made, and a comparison with a default that raises leaves the
+    construct's bare name.
+    """
+
+    def __init__(self, construct: str, signature: inspect.Signature) -> None:
+        parameters = signature.parameters.values()
+        self.construct = construct
+        self.defaults = {
+            p.name: p.default for p in parameters if p.default is not p.empty
+        }
+        self.variadic = any(p.kind is p.VAR_POSITIONAL for p in parameters)
+        self.positional = [p.name for p in parameters if p.kind in _POSITIONAL]
+        self.named = (
+            self.positional.index("name") if "name" in self.positional else None
+        )
+
+    def __call__(self, args: tuple[object, ...], kwargs: dict[str, object]) -> str:
+        """Return the name of the construct ``args`` and ``kwargs`` make."""
+        if not args and not kwargs:
+            return self.construct
+        try:
+            if self.named is not None:
+                given = kwargs.get(
+                    "name", args[self.named] if len(args) > self.named else None
+                )
+                if given is not None:
+                    return str(given)
+            parts: list[str] = []
+            for index, arg in enumerate(args):
+                key = "" if self.variadic else self.positional[index]
+                if self.variadic or key not in self.defaults:
+                    parts.append(_to_name(arg))
+                elif arg != self.defaults[key]:
+                    parts.append(f"{key}={_to_name(arg)}")
+            parts.extend(
+                f"{key}={_to_name(value)}"
+                for key, value in kwargs.items()
+                if key not in self.defaults or value != self.defaults[key]
+            )
+        except Exception:  # noqa: BLE001  (a name is no reason to refuse a schema)
+            return self.construct
+        return f"{self.construct}({','.join(parts)})" if parts else self.construct
 
 
 def _called(schema: Callable[..., object]) -> CompiledValidator:
@@ -430,7 +523,7 @@ def _called(schema: Callable[..., object]) -> CompiledValidator:
         except Exception:  # noqa: BLE001  (vtjson reads a raise as a failure)
             return False
 
-    return _predicate(called)
+    return _predicate(called, _name(schema))
 
 
 def _name(schema: object) -> str:
@@ -455,7 +548,7 @@ def _hooked(schema: object, *, open_records: bool) -> CompiledValidator:
         # keyword with the name vtjson gives a value validated alone.
         return hook(obj, name="object", strict=strict, subs={}) == ""
 
-    return _predicate(check)
+    return _predicate(check, _name(schema))
 
 
 def _constant(schema: object) -> CompiledValidator:
@@ -480,18 +573,26 @@ def _equal_to(schema: object) -> CompiledValidator:
     two apart, and the predicate is the whole of the dynamic part: one object,
     compared once.
     """
-    return _predicate(lambda obj: not obj != schema)  # noqa: SIM202  (vtjson asks `!=`)
+    return _predicate(lambda obj: not obj != schema, _to_name(schema))  # noqa: SIM202  (vtjson asks `!=`)
 
 
 _Factory = TypeVar("_Factory", bound=Callable[..., CompiledValidator])
 
 
 def _as_compiled(func: _Factory) -> _Factory:
-    """Give back a `compiled_schema`, as the class vtjson writes this construct as."""
+    """Give back a `compiled_schema`, as the class vtjson writes this construct as.
+
+    The construct is named as vtjson names it, by the call, while it is built.
+    """
+    named = _CallName(getattr(func, "__name__", ""), inspect.signature(func))
 
     @functools.wraps(func)
     def made(*args: object, **kwargs: object) -> object:
-        return _compile(func(*args, **kwargs))
+        token = _BUILDING.set(named(args, kwargs))
+        try:
+            return _compile(func(*args, **kwargs))
+        finally:
+            _BUILDING.reset(token)
 
     return made  # ty: ignore[invalid-explicit-return]
 
@@ -529,12 +630,18 @@ def _wrapper_class(func: _Factory) -> _Factory:
     and its like derive from `wrapper`, so a bare one is a class like any other.
     No value here is an instance of a construct the layer writes as a function,
     so it admits nothing. What the factory gives is a `wrapper`, and one that
-    settled its validator already waits for a mode it does not read.
+    settled its validator already waits for a mode it does not read. The
+    construct is named as vtjson names it, by the call, while it is built.
     """
+    named = _CallName(getattr(func, "__name__", ""), inspect.signature(func))
 
     @functools.wraps(func)
     def made(*args: object, **kwargs: object) -> object:
-        built = func(*args, **kwargs)
+        token = _BUILDING.set(named(args, kwargs))
+        try:
+            built = func(*args, **kwargs)
+        finally:
+            _BUILDING.reset(token)
         if isinstance(built, _Deferred):
             return built
         return _Deferred(lambda *, open_records: built)  # noqa: ARG005
@@ -593,7 +700,7 @@ def _near(value: float) -> CompiledValidator:
     def check(obj: object) -> bool:
         return type(obj) is float and math.isclose(obj, value)
 
-    return _predicate(check)
+    return _predicate(check, f"close_to({_to_name(value)})")
 
 
 _RECURSION = threading.local()
@@ -1117,7 +1224,9 @@ def _foreign_generic(
         except Exception:  # noqa: BLE001  (a value that will not convert is not one)
             return False
 
-    return _intersect(_instance_check(origin), _predicate(check))
+    return _intersect(
+        _instance_check(origin), _predicate(check, _generic_name(origin, arguments))
+    )
 
 
 def _arguments(schema: object, kind: type) -> tuple[object, ...]:
@@ -1199,7 +1308,9 @@ def _foreign_container(
         except Exception:  # noqa: BLE001  (a value that will not convert is not one)
             return False
 
-    return _intersect(_instance_check(type(schema)), _predicate(check))
+    return _intersect(
+        _instance_check(type(schema)), _predicate(check, _to_name(type(schema)))
+    )
 
 
 def _translate_type(schema: type, *, open_records: bool = False) -> CompiledValidator:
@@ -1250,7 +1361,7 @@ def _instance_check(schema: type) -> CompiledValidator:
         # valgebra cannot read in it decides nothing there. valgebra builds no
         # node for the bare `typing.Union`, which from 3.14 is the class of
         # every union object and which it reads as the typing form.
-        return _predicate(lambda obj: isinstance(obj, schema))
+        return _predicate(lambda obj: isinstance(obj, schema), _to_name(schema))
 
 
 # The plain builtins carry no demand beyond their kind. Any other class a
@@ -1582,7 +1693,7 @@ def _clauses_beside_the_mapping(
         except Exception:  # noqa: BLE001  (a mapping that cannot answer is not one)
             return False
 
-    return _intersect(_validator(dict), _predicate(check))
+    return _intersect(_validator(dict), _predicate(check, _to_name(dict)))
 
 
 def _unclaimed_key(
@@ -1640,4 +1751,4 @@ def _carries(keys: tuple[object, ...]) -> CompiledValidator:
         except Exception:  # noqa: BLE001  (a mapping that cannot answer has no such key)
             return False
 
-    return _predicate(check)
+    return _predicate(check, f"keys({','.join(_to_name(key) for key in keys)})")

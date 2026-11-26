@@ -13,6 +13,7 @@ rather than quoting.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -196,3 +197,55 @@ def test_a_refusal_names_its_place_as_vtjson_does(
     with pytest.raises(vg.ValidationError) as cast:
         vg.safe_cast(schema, value)
     assert str(cast.value).startswith(f"object{place.removeprefix('request')}: ")
+
+
+def _total_games_must_match(run: object) -> bool:
+    """Refuse every run: a rule written as fishtest writes its own."""
+    del run
+    return False
+
+
+@pytest.mark.parametrize(
+    ("make", "value"),
+    [
+        (lambda _: _total_games_must_match, {"games": 2}),
+        (lambda _: lambda _obj: False, 1),
+        (lambda m: m.email, "nope"),
+        (lambda m: m.regex(r"^a+$"), "b"),
+        (lambda m: m.regex(r"^a+$", name="letters"), "b"),
+        (lambda m: m.regex(regex="a", fullmatch=False), "b"),
+        (lambda m: m.div(3, 1), 3),
+        (lambda m: m.div(2, name="even"), 3),
+        (lambda m: m.glob("*.py"), "a.txt"),
+        (lambda m: m.ip_address(version=4), "::1"),
+        (lambda m: m.date_time("%Y"), "x"),
+        (lambda m: m.close_to(1.0), 2.0),
+        (lambda m: m.one_of("a", "b"), {}),
+        (lambda m: m.unique, [1, 1]),
+        (lambda _: 1.5, 2.5),
+    ],
+    ids=[
+        "a rule", "a lambda", "a bare construct", "a construct's call",
+        "a given name", "by keyword and default", "a default passed",
+        "a given name over the call", "a pattern", "a keyword", "a format",
+        "a tolerance", "several keys", "a nullary construct", "a float constant",
+    ],
+)  # fmt: skip
+def test_a_refusal_names_its_schema_as_vtjson_does(
+    make: Callable[[Any], object], value: object
+) -> None:
+    """The error report row: a failed check is named by the name vtjson gives it.
+
+    valgebra names a failed predicate by its callable, and the layer's checks
+    take the name vtjson's message gives the schema: a caller's callable its
+    own, a construct the call that made it or the name it was given. Where
+    vtjson's refusal reads `is not of type 'div(3,remainder=1)'`, the layer's
+    expects `a passing div(3,remainder=1)`.
+    """
+    with pytest.raises(vt.ValidationError) as told:
+        vt.validate(make(vt), value, "run")
+    named = re.search(r"is not of type '(.*?)'(?:: |$)", str(told.value))
+    assert named is not None, str(told.value)
+    with pytest.raises(vg.ValidationError) as refused:
+        vg.validate(make(vg), value, "run")
+    assert refused.value.errors[0]["expected"] == f"a passing {named.group(1)}"

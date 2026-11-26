@@ -21,6 +21,7 @@ from ._translate import (
     _predicate,
     _require,
     _text,
+    _this_construct,
 )
 from ._valgebra_api import CompiledValidator
 
@@ -35,7 +36,7 @@ def regex(
     """Match strings against a regular expression (full match by default)."""
     if name is not None:
         _text(name, "regex name")
-    del name  # accepted for vtjson signature parity; unused
+    del name  # the construct's name, which the decorator gives it, as vtjson does
     try:
         compiled = re.compile(regex, flags)
     except Exception as exc:
@@ -51,7 +52,7 @@ def regex(
         except Exception:  # noqa: BLE001  (vtjson reads a raise as a failure)
             return False
 
-    return _predicate(check)
+    return _predicate(check, _this_construct())
 
 
 @_nullary
@@ -67,13 +68,13 @@ def regex_pattern() -> CompiledValidator:
             return False
         return True
 
-    return _predicate(check)
+    return _predicate(check, _this_construct())
 
 
 @_needs_arguments
 def glob(pattern: str, name: str | None = None) -> CompiledValidator:
     """Match strings against a Unix filename pattern (``PurePath.match``)."""
-    del name  # accepted for vtjson signature parity; unused
+    del name  # the construct's name, which the decorator gives it, as vtjson does
     # Probe the pattern once, so a pattern no path can be matched against is a
     # malformed schema rather than a validator that rejects every value.
     try:
@@ -90,7 +91,7 @@ def glob(pattern: str, name: str | None = None) -> CompiledValidator:
         except (ValueError, TypeError):
             return False
 
-    return _predicate(check)
+    return _predicate(check, _this_construct())
 
 
 @_nullary
@@ -108,7 +109,7 @@ def url() -> CompiledValidator:
             return False
         return bool(result.scheme and result.netloc)
 
-    return _predicate(check)
+    return _predicate(check, _this_construct())
 
 
 @_nullary
@@ -133,7 +134,7 @@ def ip_address(version: int | None = None) -> CompiledValidator:
             return False
         return True
 
-    return _predicate(check)
+    return _predicate(check, _this_construct())
 
 
 @_nullary
@@ -152,7 +153,7 @@ def date_time(format: str | None = None) -> CompiledValidator:  # noqa: A002
             return False
         return True
 
-    return _predicate(check)
+    return _predicate(check, _this_construct())
 
 
 @_nullary
@@ -168,7 +169,7 @@ def date() -> CompiledValidator:
             return False
         return True
 
-    return _predicate(check)
+    return _predicate(check, _this_construct())
 
 
 @_nullary
@@ -184,7 +185,7 @@ def time() -> CompiledValidator:
             return False
         return True
 
-    return _predicate(check)
+    return _predicate(check, _this_construct())
 
 
 @_nullary
@@ -202,7 +203,7 @@ def email(**kw: object) -> CompiledValidator:
             return False
         return True
 
-    return _predicate(check)
+    return _predicate(check, _this_construct())
 
 
 @_nullary
@@ -235,7 +236,7 @@ def domain_name(
                 return False
         return True
 
-    return _predicate(check)
+    return _predicate(check, _this_construct())
 
 
 @_needs_arguments
@@ -247,7 +248,7 @@ def magic(mime_type: str, name: str | None = None) -> CompiledValidator:
     """
     _text(mime_type, "mime type")
     detector = _require("magic", "magic")
-    del name
+    del name  # the construct's name, which the decorator gives it, as vtjson does
 
     def check(obj: object) -> bool:
         if not isinstance(obj, str | bytes):
@@ -258,4 +259,4 @@ def magic(mime_type: str, name: str | None = None) -> CompiledValidator:
             return False
         return detected == mime_type
 
-    return _predicate(check)
+    return _predicate(check, _this_construct())

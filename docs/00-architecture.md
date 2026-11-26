@@ -66,6 +66,15 @@ part of the meaning:
 When the algebra genuinely cannot denote the set, that is a valgebra finding
 with a set of values attached, not a predicate quietly written here.
 
+A predicate is named as vtjson names its schema. valgebra names a failed
+predicate by its callable's qualified name, so each check the layer builds takes
+the name vtjson's message gives the schema in its place: a caller's callable its
+own name, a construct the call that made it, `div(3,remainder=1)`, or the `name`
+it was given, and a float constant `close_to(1.5)`. `_nullary`,
+`_needs_arguments` and `_wrapper_class` name the construct while its factory
+runs, so the name is the call's as written, `div(divisor=3)` apart from
+`div(3)`, as vtjson's is.
+
 ## What this layer is for
 
 It is a compatibility layer, and it is a harness. Driving a second

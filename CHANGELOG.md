@@ -8,6 +8,17 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- A failed check is named as vtjson names its schema. valgebra 0.0.36 names a
+  failed predicate by its callable, and the layer's checks are functions of its
+  own, so a refusal read `expected a passing _called.<locals>.called` for
+  fishtest's `total_games_must_match` and `a passing div.<locals>.check` for
+  `div(3, 1)`. Each check takes the name vtjson's message gives its schema: a
+  caller's callable its own name, a construct the call that made it,
+  `div(3,remainder=1)`, or the `name` it was given, and a float constant
+  `close_to(1.5)`. Naming a construct adds about 1 us to the call that writes
+  it (`div(3, 1)` 3.7 to 4.9 us on CPython 3.15); a value is checked as fast as
+  before.
+
 - `validate` and `safe_cast` keep a schema's translation and serve it while
   every part a caller may change in place holds what it held, so a schema
   changed between two calls is read again, as vtjson reads it. They translated

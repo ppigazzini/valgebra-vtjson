@@ -29,6 +29,7 @@ from ._translate import (
     _read_key,
     _structural,
     _text,
+    _this_construct,
     _translate,
     _translated_for_a_call,
     _wrapper_class,
@@ -91,11 +92,11 @@ def _ordered(**bounds: object) -> CompiledValidator:
             return False
 
     if any(_reads_its_own_order(bound) for bound in bounds.values()):
-        return _predicate(check)
+        return _predicate(check, _this_construct())
     try:
         return refined(**bounds)
     except ValueError:
-        return _predicate(check)
+        return _predicate(check, _this_construct())
 
 
 @_needs_arguments
@@ -167,7 +168,7 @@ def _sized_by_its_own_order(low: int, high: int | None) -> CompiledValidator:
         except Exception:  # noqa: BLE001  (vtjson reads a raise as a failure)
             return False
 
-    return _predicate(check)
+    return _predicate(check, _this_construct())
 
 
 @_needs_arguments
@@ -323,31 +324,44 @@ def _counted(
 @_nullary
 def keys(*required: object) -> CompiledValidator:
     """Require every listed key to be present."""
-    return _predicate(lambda obj: _counted(required, obj, lambda n: n == len(required)))
+    return _predicate(
+        lambda obj: _counted(required, obj, lambda n: n == len(required)),
+        _this_construct(),
+    )
 
 
 @_nullary
 def one_of(*candidates: object) -> CompiledValidator:
     """Require exactly one of the listed keys to be present."""
-    return _predicate(lambda obj: _counted(candidates, obj, lambda n: n == 1))
+    return _predicate(
+        lambda obj: _counted(candidates, obj, lambda n: n == 1), _this_construct()
+    )
 
 
 @_nullary
 def at_least_one_of(*candidates: object) -> CompiledValidator:
     """Require at least one of the listed keys to be present."""
-    return _predicate(lambda obj: _counted(candidates, obj, lambda n: n >= 1))
+    return _predicate(
+        lambda obj: _counted(candidates, obj, lambda n: n >= 1), _this_construct()
+    )
 
 
 @_nullary
 def at_most_one_of(*candidates: object) -> CompiledValidator:
     """Require at most one of the listed keys to be present."""
-    return _predicate(lambda obj: _counted(candidates, obj, lambda n: n <= 1))
+    return _predicate(
+        lambda obj: _counted(candidates, obj, lambda n: n <= 1), _this_construct()
+    )
 
 
 @_nullary
 def unique() -> CompiledValidator:
     """Require all elements of an iterable to be distinct."""
-    return _predicate(_all_distinct)
+
+    def check(obj: object) -> bool:
+        return _all_distinct(obj)
+
+    return _predicate(check, _this_construct())
 
 
 def _all_distinct(obj: object) -> bool:
@@ -366,7 +380,7 @@ def _all_distinct(obj: object) -> bool:
 @_needs_arguments
 def div(divisor: int, remainder: int = 0, name: str | None = None) -> CompiledValidator:
     """Require an ``int`` with ``value % divisor == remainder`` (floats reject)."""
-    del name  # accepted for vtjson signature parity; unused
+    del name  # the construct's name, which the decorator gives it, as vtjson does
     _integer(divisor, "divisor")
     _integer(remainder, "remainder")
     if divisor == 0:
@@ -391,7 +405,7 @@ def div(divisor: int, remainder: int = 0, name: str | None = None) -> CompiledVa
         except Exception:  # noqa: BLE001  (arithmetic that raises is not a residue)
             return False
 
-    return _predicate(check)
+    return _predicate(check, _this_construct())
 
 
 @_needs_arguments
@@ -419,7 +433,7 @@ def close_to(
             # A tolerance `math.isclose` refuses does not make a value close.
             return False
 
-    return _predicate(check)
+    return _predicate(check, _this_construct())
 
 
 @_wrapper_class
@@ -428,13 +442,19 @@ def filter(  # noqa: A001  (mirrors vtjson's public name)
     schema: object,
     filter_name: str | None = None,
 ) -> CompiledValidator:
-    """Validate ``schema`` against ``filter(value)`` (a transform-then-check)."""
+    """Validate ``schema`` against ``filter(value)`` (a transform-then-check).
+
+    The check is named as vtjson names the filter: by ``filter_name``, else by
+    the callable's own name, and a lambda or a callable with none as `filter`.
+    """
     if filter_name is not None:
         _text(filter_name, "filter name")
-    del filter_name  # accepted for vtjson signature parity; unused
     if not callable(filter):
         msg = "the filter is not callable"
         raise SchemaError(msg)
+    name = filter_name or str(getattr(filter, "__name__", "filter"))
+    if name == "<lambda>":
+        name = "filter"
 
     def build(*, open_records: bool) -> CompiledValidator:
         inner = _translate(schema, open_records=open_records)
@@ -445,7 +465,7 @@ def filter(  # noqa: A001  (mirrors vtjson's public name)
             except Exception:  # noqa: BLE001  (a transform error means non-member)
                 return False
 
-        return _predicate(check)
+        return _predicate(check, name)
 
     return _deferred(build)
 
@@ -470,6 +490,7 @@ def fields(d: Mapping[object, object]) -> CompiledValidator:
     # Two spellings of one name are one attribute holding the schema written
     # last, as vtjson's mapping of them holds it.
     named = {_read_key(name)[0]: schema for name, schema in d.items()}
+    construct = _this_construct()
 
     def build(*, open_records: bool) -> CompiledValidator:
         # Translated once, when the mode is known, and never per value: a schema
@@ -478,7 +499,7 @@ def fields(d: Mapping[object, object]) -> CompiledValidator:
             name: _translate(schema, open_records=open_records)
             for name, schema in named.items()
         }
-        return _predicate(lambda obj: _attributes_match(inner, obj))
+        return _predicate(lambda obj: _attributes_match(inner, obj), construct)
 
     return _deferred(build)
 
@@ -509,7 +530,7 @@ def protocol(schema: object, dict: bool = False) -> CompiledValidator:  # noqa: 
 @_wrapper_class
 def quote(schema: object) -> CompiledValidator:
     """Match ``schema`` as a literal by equality, not as a schema to interpret."""
-    return _predicate(lambda obj: obj == schema)
+    return _predicate(lambda obj: obj == schema, _this_construct())
 
 
 @_wrapper_class
