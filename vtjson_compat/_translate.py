@@ -247,7 +247,6 @@ class _Compiled(_Waiting, compiled_schema):
         subs: Mapping[str, object] | None = None,
     ) -> str:
         """Answer as vtjson's does: empty for a member, an explanation otherwise."""
-        del name  # cosmetic, as it is for `validate`
         if subs:
             msg = (
                 "validate-time subs substitution is not supported; "
@@ -257,7 +256,7 @@ class _Compiled(_Waiting, compiled_schema):
         try:
             self._under(open_records=not strict).validate(obj, limit=1)
         except ValidationError as exc:
-            return str(exc)
+            return str(_named(exc, name))
         return ""
 
 
@@ -775,6 +774,25 @@ def _instantiated(schema: type[compiled_schema]) -> compiled_schema:
     except Exception:  # noqa: BLE001  (vtjson refuses on any raise)
         msg = f"{schema.__name__!r} does not have a no-argument constructor"
         raise SchemaError(msg) from None
+
+
+def _named(refusal: ValidationError, name: object) -> ValidationError:
+    """Open ``refusal``'s message with ``name`` and its path as vtjson spells them.
+
+    vtjson names the place a value failed as the name it was given and each key
+    and index after it, `request['worker_info']['worker_arch']`; valgebra writes
+    `at worker_info.worker_arch:`. The message reads vtjson's place and
+    valgebra's expectation, and the failure's `code`, `path`, `expected` and
+    `value` stay as valgebra reports them. The refusal holds one failure, so its
+    message and the first item's are one.
+    """
+    place = f"{name}" + "".join(f"[{segment!r}]" for segment in refusal.path)
+    told = f"{place}: expected {refusal.expected}, got {refusal.value} [{refusal.code}]"
+    refusal.args = (told,)
+    refusal.message = told
+    for failure in refusal.errors[:1]:
+        failure["message"] = told
+    return refusal
 
 
 #: How many schemas `validate` and `safe_cast` keep translated, the latest asked.

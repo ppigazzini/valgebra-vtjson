@@ -17,6 +17,14 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   own `wrapper` is translated on every call, and the table keeps the latest 64
   schemas.
 
+- A refusal names the place a value failed as vtjson does: its message opens
+  with the name `validate` was given and the path as vtjson spells it,
+  `request['worker_info']['worker_arch']: expected ...`, where it opened with
+  valgebra's `at worker_info.worker_arch:` and dropped the name; `safe_cast`
+  names `object`, and a compiled schema's `__validate__` the name it is asked
+  with. The failure's `code`, `path`, `expected` and `value` are valgebra's, as
+  they were.
+
 - A refusal carries one failure, as vtjson's does. `validate`, `safe_cast` and
   a compiled schema's `__validate__` report the first failure of valgebra's
   report and stop the walk there, through valgebra 0.0.35's `limit`, where

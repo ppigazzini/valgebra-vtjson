@@ -157,3 +157,42 @@ def test_a_refusal_reports_one_failure_as_vtjson_does() -> None:
     assert explanation == str(validated.value)
     row = next(line for line in _LEDGER.splitlines() if "| Error report |" in line)
     assert "one structured violation" in row
+
+
+@pytest.mark.parametrize(
+    ("schema", "value", "place", "path"),
+    [
+        (int, "x", "request", ()),
+        ({"worker_info": {"worker_arch": str}}, {"worker_info": {"worker_arch": 1}},
+         "request['worker_info']['worker_arch']", ("worker_info", "worker_arch")),
+        ([int, ...], [1, "x"], "request[1]", (1,)),
+        ({str: int}, {"k": "x"}, "request['k']", ("k",)),
+    ],
+    ids=["at the root", "under a record", "under a list", "under a mapping"],
+)  # fmt: skip
+def test_a_refusal_names_its_place_as_vtjson_does(
+    schema: object, value: object, place: str, path: tuple[object, ...]
+) -> None:
+    """The error report row: the message opens with the name and vtjson's path.
+
+    vtjson names the place a value failed as the name it was given and each key
+    and index after it; the layer's message opens with the same place, before
+    valgebra's expectation, and the failure's code and path stay valgebra's.
+    """
+    with pytest.raises(vt.ValidationError) as told:
+        vt.validate(schema, value, "request")
+    assert str(told.value).startswith(place)
+    with pytest.raises(vg.ValidationError) as refused:
+        vg.validate(schema, value, "request")
+    assert str(refused.value).startswith(f"{place}: expected ")
+    assert (
+        refused.value.message
+        == str(refused.value)
+        == refused.value.errors[0]["message"]
+    )
+    assert refused.value.path == path
+    explanation = vg.compile(schema).__validate__(value, "request", True, {})
+    assert explanation == str(refused.value)
+    with pytest.raises(vg.ValidationError) as cast:
+        vg.safe_cast(schema, value)
+    assert str(cast.value).startswith(f"object{place.removeprefix('request')}: ")

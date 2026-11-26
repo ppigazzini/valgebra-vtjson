@@ -91,6 +91,7 @@ from ._formats import (
 from ._translate import (
     SchemaError,
     _compile,
+    _named,
     _nullary,
     _translated_for_a_call,
     compiled_schema,
@@ -192,17 +193,21 @@ def validate(
     """Validate ``obj`` against a vtjson-style ``schema``.
 
     Raises valgebra's ``ValidationError`` on failure, carrying the first failure
-    of valgebra's report alone, as vtjson's names one; the walk stops there.
-    ``name`` is accepted for vtjson signature parity and is cosmetic.
+    of valgebra's report alone, as vtjson's names one; the walk stops there. Its
+    message opens with ``name`` and the path as vtjson spells them,
+    ``request['worker_info']['worker_arch']``, before valgebra's expectation.
     ``strict=False`` opens every record (the lax mode). Validate-time ``subs``
     substitution is not supported — use the ``recursive`` fixpoint for
     recursion.
     """
-    del name  # accepted for vtjson signature parity; cosmetic
     if subs:
         msg = (
             "validate-time subs substitution is not supported; "
             "express recursion with valgebra's recursive fixpoint"
         )
         raise NotImplementedError(msg)
-    _translated_for_a_call(schema, open_records=not strict).validate(obj, limit=1)
+    try:
+        _translated_for_a_call(schema, open_records=not strict).validate(obj, limit=1)
+    except ValidationError as refusal:
+        _named(refusal, name)
+        raise

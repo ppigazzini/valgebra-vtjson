@@ -21,6 +21,7 @@ from ._translate import (
     _bound,
     _deferred,
     _integer,
+    _named,
     _needs_arguments,
     _nullary,
     _number,
@@ -35,6 +36,7 @@ from ._translate import (
 )
 from ._valgebra_api import (
     CompiledValidator,
+    ValidationError,
     anything,
     nothing,
     refined,
@@ -600,7 +602,11 @@ def safe_cast(schema: object, obj: object) -> object:
     A refusal carries one failure, as `validate`'s does: a validator's
     `ensure` takes no count, so the value is validated and handed back.
     """
-    _translated_for_a_call(schema, open_records=False).validate(obj, limit=1)
+    try:
+        _translated_for_a_call(schema, open_records=False).validate(obj, limit=1)
+    except ValidationError as refusal:
+        _named(refusal, "object")
+        raise
     return obj
 
 
