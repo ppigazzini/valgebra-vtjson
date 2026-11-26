@@ -27,6 +27,7 @@ import math
 import pathlib
 import re
 import typing
+import warnings
 from collections import OrderedDict, UserDict, UserList, defaultdict, deque
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, NamedTuple, Protocol, TypedDict
@@ -1277,14 +1278,30 @@ def test_an_optional_key_decides_as_the_oracle_does(
     assert not (lines := _divergences(build, VALUES)), _report(lines)
 
 
+#: The warnings vtjson gives for what the sweep asks of it on purpose, the two
+#: `pytestmark` names for the rows.
+_ASKED_FOR = ("The schema 'number' is deprecated", "NotImplemented should not be used")
+
+
 # A schema refused where it stands is refused wherever it sits, and the first
-# rows already compare that, so a position asks only what builds.
+# rows already compare that, so a position asks only what builds. Asked while the
+# module is read, where no mark applies: a warning the sweep asks for is the
+# answer to what it asked, and any other is given again.
 def _builds(call: _Call) -> bool:
-    try:
-        vt.compile(call.build(vt))
-    except Exception:  # noqa: BLE001  (any refusal is not building)
-        return False
-    return True
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        try:
+            vt.compile(call.build(vt))
+        except Exception:  # noqa: BLE001  (any refusal is not building)
+            built = False
+        else:
+            built = True
+    for seen in caught:
+        if not str(seen.message).startswith(_ASKED_FOR):
+            warnings.warn_explicit(
+                seen.message, seen.category, seen.filename, seen.lineno
+            )
+    return built
 
 
 _BUILDING = [call for call in CALLS if _builds(call)]

@@ -11,6 +11,7 @@ Both columns come from one builder, so a row cannot compare two schemas.
 
 from __future__ import annotations
 
+import contextlib
 from decimal import Decimal
 from fractions import Fraction
 from typing import TYPE_CHECKING, Annotated, Any, Literal, Optional
@@ -156,19 +157,33 @@ ROWS: list[tuple[str, Callable[[Any], object], list[object]]] = [
 ]
 
 
+#: The rows whose construct vtjson deprecates, and so warns of where it builds it.
+_DEPRECATED_BY_VTJSON = {"bare number", "called number()"}
+
+
 @pytest.mark.parametrize(("label", "build", "objects"), ROWS, ids=[r[0] for r in ROWS])
 def test_the_construct_decides_as_vtjson_does(
     label: str,
     build: Callable[[Any], object],
     objects: list[object],
 ) -> None:
-    """Every probe reaches the same verdict under both libraries."""
-    reference, layer = build(vt), build(vg)
-    divergences = [
-        (obj, _decide(vt, reference, obj), _decide(vg, layer, obj))
-        for obj in objects
-        if _decide(vt, reference, obj) != _decide(vg, layer, obj)
-    ]
+    """Every probe reaches the same verdict under both libraries.
+
+    vtjson deprecates `number` and warns where it builds one; that warning is
+    part of what vtjson does with the row, so the row asserts it.
+    """
+    deprecated = (
+        pytest.warns(DeprecationWarning, match="The schema 'number' is deprecated")
+        if label in _DEPRECATED_BY_VTJSON
+        else contextlib.nullcontext()
+    )
+    with deprecated:
+        reference, layer = build(vt), build(vg)
+        divergences = [
+            (obj, _decide(vt, reference, obj), _decide(vg, layer, obj))
+            for obj in objects
+            if _decide(vt, reference, obj) != _decide(vg, layer, obj)
+        ]
     assert not divergences, f"{label}: " + ", ".join(
         f"{obj!r} vtjson={a} layer={b}" for obj, a, b in divergences
     )

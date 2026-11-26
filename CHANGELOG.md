@@ -33,8 +33,8 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   add answers to relations, which the layer asks none of. 0.0.35 holds an
   integer bound exactly to 1,024 bits, names the depth a value refused at the
   walk's bound reached, and lets `validate` stop after a given number of
-  failures. On 0.0.35 as PyPI serves it, 24,819 tests pass and 6 skip on 3.15
-  against the pinned oracle, as on 0.0.32.
+  failures. On 0.0.35 as PyPI serves it, 24,822 tests pass and 6 skip on 3.15
+  against the pinned oracle, with no warning.
 
 - valgebra 0.0.29, below 0.0.30. 0.0.29 changes no answer, no message and no
   error code of 0.0.28: its own source differs in comments alone, and its wheels
