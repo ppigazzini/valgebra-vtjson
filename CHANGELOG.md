@@ -44,14 +44,16 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   from 3.11 to 3.15 and the free-threaded 3.14t and 3.15t run the differential
   suite, and every test reaches the outcome it reached under the 3.10 floor.
 
-- valgebra 0.0.35 or later, with no upper bound: a ceiling cannot be lifted
+- valgebra 0.0.36 or later, with no upper bound: a ceiling cannot be lifted
   from a published version, so a valgebra release installs beside the layer the
   day it is published, as valgebra names a companion's floor. 0.0.33 and 0.0.34
   add answers to relations, which the layer asks none of. 0.0.35 holds an
   integer bound exactly to 1,024 bits, names the depth a value refused at the
   walk's bound reached, and lets `validate` stop after a given number of
-  failures. On 0.0.35 as PyPI serves it, 24,822 tests pass and 6 skip on 3.15
-  against the pinned oracle, with no warning.
+  failures. 0.0.36 lets `ensure` stop so too, and names a failed predicate by
+  its callable's qualified name where it read `a passing predicate`. On 0.0.36
+  as PyPI serves it, 24,837 tests pass and 6 skip on 3.15 against the pinned
+  oracle, with no warning.
 
 - valgebra 0.0.29, below 0.0.30. 0.0.29 changes no answer, no message and no
   error code of 0.0.28: its own source differs in comments alone, and its wheels
