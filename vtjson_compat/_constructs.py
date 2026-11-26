@@ -620,15 +620,15 @@ def make_type(
 def safe_cast(schema: object, obj: object) -> object:
     """Validate ``obj`` against ``schema`` and return it unchanged.
 
-    A refusal carries one failure, as `validate`'s does: a validator's
-    `ensure` takes no count, so the value is validated and handed back.
+    It is a validator's `ensure`, which hands a member back as itself, and a
+    refusal carries one failure, as `validate`'s does: `limit=1` stops the walk
+    at the first.
     """
     try:
-        _translated_for_a_call(schema, open_records=False).validate(obj, limit=1)
+        return _translated_for_a_call(schema, open_records=False).ensure(obj, limit=1)
     except ValidationError as refusal:
         _named(refusal, "object")
         raise
-    return obj
 
 
 @_wrapper_class

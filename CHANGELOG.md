@@ -38,11 +38,12 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - A refusal carries one failure, as vtjson's does. `validate`, `safe_cast` and
   a compiled schema's `__validate__` report the first failure of valgebra's
-  report and stop the walk there, through valgebra 0.0.35's `limit`, where
-  they reported every failure the value holds: a value wrong at four places
-  raised four violations, though the ledger names one. The failure reported
-  is valgebra's first, so a value wrong at two keys may be told of another
-  key than vtjson names.
+  report and stop the walk there, through valgebra's `limit`, `safe_cast` as
+  `ensure(obj, limit=1)`, which hands a member back as itself, where they
+  reported every failure the value holds: a value wrong at four places raised
+  four violations, though the ledger names one. The failure reported is
+  valgebra's first, so a value wrong at two keys may be told of another key
+  than vtjson names.
 
 - The package claims no `Typing :: Typed`: it ships no `py.typed`, and its
   annotations are partial, so a type checker reading it as typed would read the
