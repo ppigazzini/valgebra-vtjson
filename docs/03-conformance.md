@@ -188,9 +188,14 @@ The compatibility layer is checked against the real
 [fishtest](https://github.com/official-stockfish/fishtest) schemas, which are
 fetched at a pinned commit and run through both vtjson and the compatibility
 layer. Every string-keyed schema — including the full run document
-(`runs_schema`), `api_schema`, `action_schema`, and `results_schema` — reaches
-the same accept/reject decision. All six schema-keyed tables reach identical
-decisions too: `cache_schema`, `wtt_map_schema`, `connections_counter_schema`,
+(`runs_schema`), `api_schema`, every variant of `action_schema`, and
+`results_schema` — is seeded with documents written for the test, which both
+accept, and every mutation of a seed reaches vtjson's decision: a key added or
+deleted, a value replaced by one of another kind, an int and a float swapped,
+NaN and infinity. The two that part are the typed-singleton row above: a
+finished run writes `0.0` for `nps` and `games_per_minute`, which vtjson's `==`
+meets with the int `0` and valgebra does not. All six schema-keyed tables reach
+identical decisions too: `cache_schema`, `wtt_map_schema`, `connections_counter_schema`,
 `books_schema`, the `unfinished_runs_schema` set, and `worker_runs_schema` —
 whose value is a *mixed* record-plus-catch-all (`{run_id: True, "last_run":
 run_id}`) that valgebra's keyed-default mapping expresses. fishtest's own

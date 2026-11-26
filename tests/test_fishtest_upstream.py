@@ -7,15 +7,20 @@ schema-construct namespace (the same constructs, from vtjson on one side and the
 compatibility layer on the other), and checks that the two agree on a document
 corpus.
 
-The test skips when offline. Every string-keyed schema and all six schema-keyed
-tables — including worker_runs, whose value mixes a named key with a key-schema
-catch-all (a heterogeneous map valgebra now expresses) — reach identical
-accept/reject decisions.
+The test skips when offline. Every string-keyed schema is seeded with documents
+written for this test, which both engines accept, and every mutation of a seed
+reaches vtjson's decision but the conformance ledger's typed-singleton rows. All
+six schema-keyed tables — including worker_runs, whose value mixes a named key
+with a key-schema catch-all (a heterogeneous map valgebra now expresses) — reach
+identical accept/reject decisions.
 """
 
 from __future__ import annotations
 
+import copy
 import datetime as dt
+import gzip
+import math
 import re
 import types
 import urllib.error
@@ -172,6 +177,199 @@ def _build(lib: object, source: str) -> dict:
     return {name: namespace[name] for name in wanted if name in namespace}
 
 
+# Seed documents, written for this test: each is accepted by both engines, and
+# its mutations probe the schema around it. Nothing of fishtest's is copied; the
+# field names are the schema's own.
+_SEED_TIME = dt.datetime(2025, 6, 7, 8, 9, 10, tzinfo=dt.UTC)
+_SEED_RUN = "seed-c0ffee1"
+_SEED_LONG_WORKER = "seedhost-8cores-qz12-c0de"
+_SEED_SHORT_WORKER = "seedhost-8cores-qz12"
+_SEED_NET = "nn-0123456789ab.nnue"
+_SEED_RESULTS = {
+    "wins": 1, "losses": 1, "draws": 0, "crashes": 0, "time_losses": 0,
+    "pentanomial": [0, 0, 1, 0, 0],
+}  # fmt: skip
+_SEED_ARGS = {
+    "base_tag": "main", "new_tag": "trial", "base_nets": [_SEED_NET],
+    "new_nets": ["nn-0123456789ac.nnue"], "num_games": 2, "tc": "8+0.08",
+    "new_tc": "8+0.08", "book": "seed.epd", "book_depth": "6", "threads": 1,
+    "resolved_base": "c" * 40, "resolved_new": "d" * 40, "msg_base": "base",
+    "msg_new": "trial", "base_options": "Hash=8", "new_options": "Hash=8",
+    "info": "", "base_signature": "4242", "new_signature": "4243",
+    "username": "seeder", "tests_repo": "https://github.com/seeder/engine",
+    "auto_purge": False, "throughput": 100.0, "itp": 100.0, "priority": 0.0,
+    "adjudication": True,
+}  # fmt: skip
+_SEED_REF = {"run_id": _OID, "run": _SEED_RUN}
+_SEED_TASK = {"worker": _SEED_LONG_WORKER, "task_id": 3}
+_SEED_ACTIONS = {
+    "failed_task": {**_SEED_REF, **_SEED_TASK, "message": "lost"},
+    "crash_or_time": {**_SEED_REF, **_SEED_TASK, "message": "late"},
+    "dead_task": {**_SEED_REF, **_SEED_TASK},
+    "system_event": {"message": "restart"},
+    "new_run": {**_SEED_REF, "message": "queued"},
+    "upload_nn": {"nn": _SEED_NET},
+    "modify_run": {**_SEED_REF, "message": "edited"},
+    "delete_run": _SEED_REF,
+    "stop_run": {**_SEED_REF, "message": "halted"},
+    "finished_run": {**_SEED_REF, "message": "done"},
+    "approve_run": {**_SEED_REF, "message": "approved"},
+    "purge_run": {**_SEED_REF, "message": "purged"},
+    "block_user": {"user": "someone", "message": "blocked"},
+    "accept_user": {"user": "someone", "message": "accepted"},
+    "block_worker": {"worker": _SEED_SHORT_WORKER, "message": "blocked"},
+    "log_message": {"message": "note"},
+    "worker_log": {"worker": _SEED_LONG_WORKER, "message": "note"},
+}  # fmt: skip
+
+
+def _seeds() -> dict[str, list[object]]:
+    """Each string-keyed schema's seed documents, built fresh for each use."""
+    pgn = gzip.compress(b'[Event "seed"]\n', mtime=0)
+    net = {"downloads": 7, "name": _SEED_NET, "user": "seeder"}
+    tested = {
+        **net,
+        "is_master": True,
+        "first_test": {"date": _SEED_TIME, "id": _OID},
+        "last_test": {"date": _SEED_TIME, "id": _OID},
+    }
+    task = {
+        "num_games": 2, "active": False, "last_updated": _SEED_TIME, "start": 0,
+        "stats": _SEED_RESULTS, "worker_info": _WORKER_INFO_RUNS,
+    }  # fmt: skip
+    run = {
+        "_id": _ObjectId(), "version": 24, "start_time": _SEED_TIME,
+        "last_updated": _SEED_TIME, "tc_base": 8.0, "approved": True,
+        "approver": "seeder", "finished": True, "deleted": False, "failed": False,
+        "failures": 0, "is_green": False, "is_yellow": False, "workers": 0,
+        "cores": 0, "committed_games": 2, "total_games": 2, "results": _SEED_RESULTS,
+        "nps": 0.0, "games_per_minute": 0.0, "args": _SEED_ARGS, "tasks": [task],
+        "bad_tasks": [],
+    }  # fmt: skip
+    actions: list[object] = [
+        {
+            "_id": _ObjectId(),
+            "time": 1.5,
+            "action": name,
+            "username": "fishtest.system" if name == "system_event" else "seeder",
+            **fields,
+        }
+        for name, fields in _SEED_ACTIONS.items()
+    ]
+    seeds: dict[str, list[object]] = {
+        "pgns_schema": [{"run_id": f"{_OID}-3", "pgn_zip": pgn, "size": len(pgn)}],
+        "user_schema": [{
+            "username": "seeder", "password": "pw", "registration_time": _SEED_TIME,
+            "pending": False, "blocked": False, "email": "seeder@example.org",
+            "groups": ["approvers"], "tests_repo": "", "machine_limit": 8,
+        }],
+        "kvstore_schema": [{"_id": "seed", "value": {"nested": [1, 2]}}],
+        "worker_schema": [{
+            "worker_name": _SEED_SHORT_WORKER, "blocked": False, "message": "hi",
+            "last_updated": _SEED_TIME,
+        }],
+        "nn_schema": [net, tested],
+        "contributors_schema": [{
+            "_id": _ObjectId(), "cpu_hours": 1.5, "diff": 0.0, "games": 10,
+            "games_per_hour": 2.0, "last_updated": _SEED_TIME,
+            "str_last_updated": "today", "tests": 1, "tests_repo": "",
+            "username": "seeder",
+        }],
+        "action_schema": actions,
+        "results_schema": [_SEED_RESULTS],
+        "api_access_schema": [
+            {"password": "pw", "worker_info": {"username": "seeder"}}
+        ],
+        "api_schema": [{
+            "password": "pw", "run_id": _OID, "task_id": 3,
+            "worker_info": _WORKER_INFO_API, "stats": _SEED_RESULTS,
+        }],
+        "runs_schema": [run],
+        "worker_info_schema_api": [_WORKER_INFO_API],
+        "worker_info_schema_runs": [_WORKER_INFO_RUNS],
+    }  # fmt: skip
+    return copy.deepcopy(seeds)
+
+
+#: The mutations the conformance ledger's typed-singleton row parts, by schema,
+#: path and kind: a finished run writes `0.0` for `nps` and `games_per_minute`,
+#: which vtjson's `==` meets with the int `0` and valgebra's typed singleton does
+#: not (docs/03-conformance.md, "Literal / constant equality").
+_TYPED_SINGLETONS = {
+    ("runs_schema", ("nps",), "int and float swapped"),
+    ("runs_schema", ("games_per_minute",), "int and float swapped"),
+}
+
+
+def _paths(value: object, prefix: tuple = ()) -> list[tuple]:
+    """Every path into ``value``, a list read at its first item."""
+    found = [prefix]
+    if isinstance(value, dict):
+        for key in value:
+            found += _paths(value[key], (*prefix, key))
+    elif isinstance(value, list) and value:
+        found += _paths(value[0], (*prefix, 0))
+    return found
+
+
+def _at(document: object, path: tuple) -> object:
+    for step in path:
+        document = document[step]  # ty: ignore[not-subscriptable]
+    return document
+
+
+def _mutations(document: object) -> list[tuple[tuple, str, object]]:
+    """Each mutation of ``document``, as its path, its kind and the document.
+
+    A key added to every mapping; at every path, the key deleted and the value
+    replaced by one of another kind -- `None`, a string, `-1`, `True` -- and a
+    number by the other kind of number, NaN and infinity.
+    """
+    found = []
+    for path in _paths(document):
+        node = _at(document, path)
+        if isinstance(node, dict):
+            added = copy.deepcopy(document)
+            _at(added, path)["zz_added"] = 1  # ty: ignore[invalid-assignment]
+            found.append((path, "key added", added))
+        if not path:
+            continue
+        parent, last = path[:-1], path[-1]
+        if isinstance(_at(document, parent), dict):
+            deleted = copy.deepcopy(document)
+            del _at(deleted, parent)[last]  # ty: ignore[not-subscriptable]
+            found.append((path, "key deleted", deleted))
+        kinds: dict[str, object] = {
+            "None": None,
+            "a string": "zz",
+            "-1": -1,
+            "True": True,
+        }
+        if isinstance(node, int) and not isinstance(node, bool):
+            kinds.update(
+                {
+                    "int and float swapped": float(node),
+                    "NaN": math.nan,
+                    "infinity": math.inf,
+                }
+            )
+        elif isinstance(node, float):
+            kinds.update(
+                {
+                    "int and float swapped": int(node),
+                    "NaN": math.nan,
+                    "infinity": math.inf,
+                }
+            )
+        for kind, value in kinds.items():
+            if type(value) is type(node) and value == node:
+                continue
+            changed = copy.deepcopy(document)
+            _at(changed, parent)[last] = value  # ty: ignore[invalid-assignment]
+            found.append((path, kind, changed))
+    return found
+
+
 def _accepts(validate, schema: object, obj: object) -> bool:
     try:
         validate(schema, obj)
@@ -248,6 +446,44 @@ def test_fishtest_upstream_parity() -> None:
     assert "kvstore_schema" not in unsupported
     assert "user_schema" not in unsupported
     assert "worker_schema" not in unsupported
+
+
+def test_fishtest_seeds_and_their_mutations_reach_vtjsons_decision() -> None:
+    """Each string-keyed schema accepts its seeds, and their mutations agree.
+
+    Every seed is accepted by both engines, so every schema's accept path is read;
+    every mutation of a seed reaches vtjson's decision, but the ledger's
+    typed-singleton rows, which are asserted the way the ledger states them:
+    vtjson accepts and valgebra refuses.
+    """
+    source = _fetch_source()
+    if source is None:
+        pytest.skip("the fishtest schema source is not reachable (offline)")
+    try:
+        vt_schemas = _build(vt, source)
+        vg_schemas = _build(vg, source)
+    except ImportError as exc:  # an optional format extra is not installed
+        pytest.skip(f"optional dependency missing: {exc}")
+
+    seeds = _seeds()
+    assert set(seeds) == set(_STRING_KEYED)
+    singletons = set()
+    for name, documents in seeds.items():
+        vt_schema, vg_schema = vt_schemas[name], vg_schemas[name]
+        for document in documents:
+            assert _accepts(vt.validate, vt_schema, document), (name, document)
+            assert _accepts(vg.validate, vg_schema, document), (name, document)
+            for path, kind, mutated in _mutations(document):
+                vt_ok = _accepts(vt.validate, vt_schema, mutated)
+                vg_ok = _accepts(vg.validate, vg_schema, mutated)
+                if (name, path, kind) in _TYPED_SINGLETONS:
+                    singletons.add((name, path, kind))
+                    assert (vt_ok, vg_ok) == (True, False), (name, path, kind)
+                else:
+                    assert vt_ok == vg_ok, (
+                        f"{name} {path} {kind}: vtjson={vt_ok} compat={vg_ok}"
+                    )
+    assert singletons == _TYPED_SINGLETONS
 
 
 def test_fishtest_upstream_mapping_keyed_parity() -> None:
